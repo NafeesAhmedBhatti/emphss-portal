@@ -53,7 +53,7 @@ export default function DeveloperPage() {
 
                 <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5 sm:justify-start">
                   <a
-                    href="https://nafees-ahmed.vercel.app/"
+                    href="https://nafees-portfolio-livid.vercel.app/"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2.5 text-xs font-bold text-[#0F2942] shadow-md transition-all hover:bg-amber-400"
@@ -95,29 +95,32 @@ export default function DeveloperPage() {
             </div>
           </div>
 
-          {/* About & Teaching Background */}
+          {/* About & Technical Intro */}
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs sm:p-8">
             <h2 className="font-heading text-lg font-bold text-[#0F2942]">
               About Nafees Ahmed Bhatti
             </h2>
             <p className="mt-2.5 text-sm leading-relaxed text-slate-600 sm:text-base">
-              I am an <strong>AI Engineer and Full-Stack Developer</strong>{" "}
-              passionate about turning real-world ideas into fast, reliable
-              software. My journey began with building web applications and
-              mentoring students—having trained{" "}
+              I&apos;m an{" "}
               <strong className="text-[#0F2942]">
-                500+ students in full-stack development
+                AI Engineer at Drytis
+              </strong>{" "}
+              and{" "}
+              <strong className="text-[#0F2942]">
+                Computer Science Teacher at EMPHSS Bawli
               </strong>
-              —which naturally grew into engineering intelligent Generative AI,
-              LLM, and machine learning systems.
+              , focused on building production LLM workflows and full-stack web
+              applications in TypeScript, Next.js, Python, and PostgreSQL—alongside
+              mentoring 500+ students in practical software development.
             </p>
             <p className="mt-3 text-sm leading-relaxed text-slate-600 sm:text-base">
-              I designed and engineered this complete{" "}
+              I designed and engineered this{" "}
               <strong className="text-[#0F2942]">
-                EMPHSS Bawli Digital School Portal
+                EMPHSS Digital School Portal
               </strong>{" "}
-              to replace manual paper registers with a secure, mobile-first
-              platform for students, teachers, and school administration.
+              end-to-end with role-based authentication, instant Digital ID
+              cards, and a Digital Award Roll for students, teachers, and
+              administration.
             </p>
           </div>
 
