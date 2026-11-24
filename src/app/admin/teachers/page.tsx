@@ -17,8 +17,9 @@ export default async function AdminTeachersPage() {
     prisma.teacher.findMany({ orderBy: { createdAt: "desc" } }),
   ]);
 
-  const serialized = teachers.map((t) => ({
+  const serialized = teachers.map(({ pinHash, ...t }) => ({
     ...t,
+    hasPin: Boolean(pinHash),
     createdAt: t.createdAt.toISOString(),
   }));
 

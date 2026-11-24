@@ -1,12 +1,16 @@
-import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { privateJson, verifySameOrigin } from "@/lib/http";
 
 export async function PATCH(request: Request) {
+  if (!verifySameOrigin(request)) {
+    return privateJson({ error: "Invalid request origin." }, { status: 403 });
+  }
+
   const session = await getSession();
   if (!session || session.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    return privateJson({ error: "Forbidden." }, { status: 403 });
   }
 
   try {
@@ -20,7 +24,7 @@ export async function PATCH(request: Request) {
     if (typeof body.teacherPasscode === "string") {
       const newTeacherPasscode = body.teacherPasscode.trim();
       if (newTeacherPasscode.length < 6 || newTeacherPasscode.length > 128) {
-        return NextResponse.json(
+        return privateJson(
           { error: "Teacher access password must be between 6 and 128 characters." },
           { status: 400 }
         );
@@ -39,10 +43,10 @@ export async function PATCH(request: Request) {
       },
     });
 
-    return NextResponse.json({ settings: updated });
+    return privateJson({ settings: updated });
   } catch (error) {
     console.error("Update settings error:", error);
-    return NextResponse.json(
+    return privateJson(
       { error: "Unable to update settings." },
       { status: 500 }
     );

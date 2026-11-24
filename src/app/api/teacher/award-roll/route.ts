@@ -1,12 +1,25 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { CLASS_ORDER, getSubjectsForClass } from "@/lib/constants";
+import { privateJson, verifySameOrigin } from "@/lib/http";
+import {
+  canAccessClass,
+  canEditSubject,
+  getAuthorizedTeacher,
+} from "@/lib/teacher-authz";
 
 export async function GET(request: Request) {
   const session = await getSession();
   if (!session) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    return privateJson({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  const authz = await getAuthorizedTeacher(session);
+  if (!authz) {
+    return privateJson(
+      { error: "Please verify your Teacher Profile PIN first." },
+      { status: 403 }
+    );
   }
 
   const { searchParams } = new URL(request.url);
@@ -14,9 +27,16 @@ export async function GET(request: Request) {
   const examName = (searchParams.get("examName") || "T1").trim().slice(0, 30);
 
   if (!CLASS_ORDER.includes(className as (typeof CLASS_ORDER)[number])) {
-    return NextResponse.json(
+    return privateJson(
       { error: "Valid class name is required." },
       { status: 400 }
+    );
+  }
+
+  if (!canAccessClass(authz, className)) {
+    return privateJson(
+      { error: "You are not assigned to this class Award Roll." },
+      { status: 403 }
     );
   }
 
@@ -68,7 +88,7 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({
+  return privateJson({
     session: currentSession,
     className,
     examName,
@@ -81,9 +101,21 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (!verifySameOrigin(request)) {
+    return privateJson({ error: "Invalid request origin." }, { status: 403 });
+  }
+
   const session = await getSession();
   if (!session) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    return privateJson({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  const authz = await getAuthorizedTeacher(session);
+  if (!authz) {
+    return privateJson(
+      { error: "Please verify your Teacher Profile PIN first." },
+      { status: 403 }
+    );
   }
 
   try {
@@ -104,9 +136,16 @@ export async function POST(request: Request) {
     );
 
     if (!CLASS_ORDER.includes(className as (typeof CLASS_ORDER)[number])) {
-      return NextResponse.json(
+      return privateJson(
         { error: "Valid class name is required." },
         { status: 400 }
+      );
+    }
+
+    if (!canAccessClass(authz, className)) {
+      return privateJson(
+        { error: "You are not assigned to edit this class Award Roll." },
+        { status: 403 }
       );
     }
 
@@ -120,17 +159,46 @@ export async function POST(request: Request) {
       .slice(0, 25);
 
     if (subjects.length === 0) {
-      return NextResponse.json(
+      return privateJson(
         { error: "At least one valid subject is required." },
         { status: 400 }
       );
     }
 
-    const activeClassStudents = await prisma.student.findMany({
-      where: { status: "Active", currentClass: className },
-      select: { id: true },
+    const settings = await prisma.schoolSettings.findUnique({
+      where: { id: "main" },
     });
+    const currentSession = settings?.currentSession ?? "2026-27";
+
+    const [activeClassStudents, existingRoll] = await Promise.all([
+      prisma.student.findMany({
+        where: { status: "Active", currentClass: className },
+        select: { id: true },
+      }),
+      prisma.awardRoll.findUnique({
+        where: {
+          className_examName_session: {
+            className,
+            examName,
+            session: currentSession,
+          },
+        },
+      }),
+    ]);
+
     const validStudentIds = new Set(activeClassStudents.map((s) => s.id));
+
+    let existingMarks: Record<string, Record<string, string>> = {};
+    if (existingRoll) {
+      try {
+        existingMarks = JSON.parse(existingRoll.marksJson) || {};
+      } catch {
+        existingMarks = {};
+      }
+    }
+
+    const isFormTeacherOrAdmin =
+      authz.isAdmin || authz.teacher?.formTeacherClass === className;
 
     const sanitizedMarks: Record<string, Record<string, string>> = {};
     if (body.marks && typeof body.marks === "object" && !Array.isArray(body.marks)) {
@@ -141,22 +209,35 @@ export async function POST(request: Request) {
         if (!subjObj || typeof subjObj !== "object" || Array.isArray(subjObj)) {
           continue;
         }
-        const stuMarks: Record<string, string> = {};
+        const stuMarks: Record<string, string> = isFormTeacherOrAdmin
+          ? {}
+          : { ...(existingMarks[stuId] || {}) };
+
         for (const [subj, val] of Object.entries(
           subjObj as Record<string, unknown>
         )) {
-          if (typeof val === "string" && val.length <= 20) {
-            stuMarks[subj.slice(0, 60)] = val.trim();
+          const cleanSubj = subj.slice(0, 60);
+          if (typeof val !== "string" || val.length > 20) continue;
+
+          if (!isFormTeacherOrAdmin && !canEditSubject(authz, className, cleanSubj)) {
+            // Preserve existing mark if unchanged; reject if subject teacher tried to alter another subject
+            const prevVal = existingMarks[stuId]?.[cleanSubj] ?? "";
+            if (val.trim() !== prevVal) {
+              return privateJson(
+                {
+                  error: `You are not assigned to edit marks for subject "${cleanSubj}".`,
+                },
+                { status: 403 }
+              );
+            }
+            continue;
           }
+
+          stuMarks[cleanSubj] = val.trim();
         }
         sanitizedMarks[stuId] = stuMarks;
       }
     }
-
-    const settings = await prisma.schoolSettings.findUnique({
-      where: { id: "main" },
-    });
-    const currentSession = settings?.currentSession ?? "2026-27";
 
     const saved = await prisma.awardRoll.upsert({
       where: {
@@ -183,10 +264,10 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json({ success: true, awardRoll: saved });
+    return privateJson({ success: true, awardRoll: saved });
   } catch (error) {
     console.error("Save award roll error:", error);
-    return NextResponse.json(
+    return privateJson(
       { error: "Unable to save Award Roll draft." },
       { status: 500 }
     );

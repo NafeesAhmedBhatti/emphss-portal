@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStudentSession } from "@/lib/auth";
+import { privateJson } from "@/lib/http";
 
 export async function GET() {
   const stuSession = await getStudentSession();
   if (!stuSession) {
-    return NextResponse.json({ student: null, corrections: [] });
+    return privateJson({ student: null, corrections: [] });
   }
 
   const [student, corrections] = await Promise.all([
@@ -19,8 +19,12 @@ export async function GET() {
   ]);
 
   if (!student) {
-    return NextResponse.json({ student: null, corrections: [] });
+    return privateJson({ student: null, corrections: [] });
   }
 
-  return NextResponse.json({ student, corrections });
+  // Only Active / Passed Out students may receive official ID card photo data
+  const safeStudent =
+    student.status === "Pending" ? { ...student, photoData: null } : student;
+
+  return privateJson({ student: safeStudent, corrections });
 }

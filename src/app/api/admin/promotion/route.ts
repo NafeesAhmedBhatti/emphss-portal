@@ -1,12 +1,15 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { getNextClass, PASSED_OUT_STATUS } from "@/lib/constants";
+import { privateJson, verifySameOrigin } from "@/lib/http";
 
 export async function POST(request: Request) {
+  if (!verifySameOrigin(request)) {
+    return privateJson({ error: "Invalid request origin." }, { status: 403 });
+  }
   const session = await getSession();
   if (!session || session.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    return privateJson({ error: "Forbidden." }, { status: 403 });
   }
 
   try {
@@ -20,7 +23,7 @@ export async function POST(request: Request) {
       : [];
 
     if (!toSession || toSession.length < 4) {
-      return NextResponse.json(
+      return privateJson(
         { error: "Please enter a valid target academic session (e.g., 2027-28)." },
         { status: 400 }
       );
@@ -34,7 +37,7 @@ export async function POST(request: Request) {
     const fromSession = settings?.currentSession ?? "2026-27";
 
     if (fromSession === toSession) {
-      return NextResponse.json(
+      return privateJson(
         { error: "New session must be different from the current session." },
         { status: 400 }
       );
@@ -46,7 +49,7 @@ export async function POST(request: Request) {
     });
 
     if (activeStudents.length === 0) {
-      return NextResponse.json(
+      return privateJson(
         { error: "There are no active students to promote." },
         { status: 400 }
       );
@@ -106,7 +109,7 @@ export async function POST(request: Request) {
       });
     });
 
-    return NextResponse.json({
+    return privateJson({
       success: true,
       summary: {
         fromSession,
@@ -118,7 +121,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Class promotion error:", error);
-    return NextResponse.json(
+    return privateJson(
       { error: "Unable to complete class promotion. Please try again." },
       { status: 500 }
     );

@@ -23,10 +23,12 @@ model Student {
   transportMode String   // "Local" or "School Transport"
   vehicleRoute  String?
   subjects      String   @default("") // Comma-separated subjects
-  photoData     String?
-  status        String   @default("Active") // "Active" or "Passed Out"
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  photoData            String?
+  status               String    @default("Active") // "Active" or "Passed Out"
+  consentAcceptedAt    DateTime?
+  privacyNoticeVersion String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   @@index([currentClass])
   @@index([transportMode])
@@ -46,8 +48,12 @@ model Teacher {
   formTeacherClass String?
   subjects         String
   roleSummary      String
-  photoData        String?
-  isActive         Boolean  @default(true)
+  photoData               String?
+  pinHash                 String?
+  pinVersion              Int       @default(1)
+  enrollmentCodeHash      String?
+  enrollmentCodeExpiresAt DateTime?
+  isActive                Boolean   @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 }

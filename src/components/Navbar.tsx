@@ -20,41 +20,18 @@ export function Navbar() {
 
   useEffect(() => {
     let mounted = true;
-    try {
-      const cached = window.sessionStorage.getItem("emphss_nav_student");
-      if (cached) {
-        setActiveStudent(JSON.parse(cached));
-      }
-    } catch {
-      // ignore storage errors
-    }
-
-    fetch("/api/students/me")
+    fetch("/api/students/me", { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
         if (!mounted) return;
         if (data.student) {
-          const badge = {
+          setActiveStudent({
             referenceId: data.student.referenceId,
             studentName: data.student.studentName,
             photoData: data.student.photoData,
-          };
-          setActiveStudent(badge);
-          try {
-            window.sessionStorage.setItem(
-              "emphss_nav_student",
-              JSON.stringify(badge)
-            );
-          } catch {
-            // ignore
-          }
+          });
         } else {
           setActiveStudent(null);
-          try {
-            window.sessionStorage.removeItem("emphss_nav_student");
-          } catch {
-            // ignore
-          }
         }
       })
       .catch(() => {});

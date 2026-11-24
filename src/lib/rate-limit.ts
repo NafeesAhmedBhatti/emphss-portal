@@ -8,19 +8,27 @@ interface AttemptEntry {
 const memoryBuckets = new Map<string, AttemptEntry>();
 
 export function getClientIp(request: Request): string {
+  // Prefer Vercel's trusted edge header when deployed on Vercel
+  const vercelIp = request.headers.get("x-vercel-forwarded-for")?.trim();
+  if (vercelIp) {
+    const first = vercelIp.split(",")[0]?.trim();
+    if (first) return first.slice(0, 64);
+  }
+
   const realIp = request.headers.get("x-real-ip")?.trim();
   if (realIp) return realIp.slice(0, 64);
 
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) {
-    const first = forwarded.split(",")[0]?.trim();
-    if (first) return first.slice(0, 64);
+    const parts = forwarded.split(",").map((s) => s.trim()).filter(Boolean);
+    const ip = parts[parts.length - 1];
+    if (ip) return ip.slice(0, 64);
   }
 
   return "local";
 }
 
-function checkMemoryRateLimit(
+export function checkMemoryRateLimit(
   key: string,
   maxAttempts: number,
   windowMs: number
@@ -53,6 +61,13 @@ export async function checkRateLimit(
   const nextReset = new Date(now.getTime() + windowMs);
 
   try {
+    // Opportunistically clean up expired rate-limit entries (~5% of requests)
+    if (Math.random() < 0.05) {
+      await prisma.rateLimit.deleteMany({
+        where: { resetAt: { lt: now } },
+      });
+    }
+
     return await prisma.$transaction(async (tx) => {
       const existing = await tx.rateLimit.findUnique({ where: { key } });
 
@@ -80,7 +95,6 @@ export async function checkRateLimit(
       return { allowed: true, retryAfterSec: 0 };
     });
   } catch {
-    // Fallback to in-memory limiter if DB is unavailable (e.g., isolated unit tests)
     return checkMemoryRateLimit(key, maxAttempts, windowMs);
   }
 }

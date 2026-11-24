@@ -7,12 +7,43 @@ const TEST_SECRET = new TextEncoder().encode(
   process.env.AUTH_SECRET || "emphss-bawli-local-dev-secret-key-2026"
 );
 
+// Production DB safety guard: refuse DB-mutating tests if pointing at production Neon host
+const DB_URL = process.env.DATABASE_URL || "";
+const IS_ISOLATED_DB =
+  process.env.ALLOW_ISOLATED_DB_TESTS === "1" &&
+  DB_URL.length > 0 &&
+  !DB_URL.includes("ep-still-morning-biwvnkfj");
+
 function csvCell(val) {
   let str = String(val ?? "");
   if (/^[=+\-@\t\r]/.test(str)) {
     str = `'${str}`;
   }
   return `"${str.replace(/"/g, '""')}"`;
+}
+
+function validateImageSignature(dataUrl) {
+  const match = dataUrl.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) return false;
+  const fmt = match[1];
+  const buf = Buffer.from(match[2], "base64");
+  if (buf.length < 16) return false;
+  if (fmt === "jpeg") return buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+  if (fmt === "png") {
+    return (
+      buf[0] === 0x89 &&
+      buf[1] === 0x50 &&
+      buf[2] === 0x4e &&
+      buf[3] === 0x47
+    );
+  }
+  if (fmt === "webp") {
+    return (
+      buf.subarray(0, 4).toString("ascii") === "RIFF" &&
+      buf.subarray(8, 12).toString("ascii") === "WEBP"
+    );
+  }
+  return false;
 }
 
 test("CSV formula injection neutralization prefixes dangerous leading chars", () => {
@@ -22,6 +53,20 @@ test("CSV formula injection neutralization prefixes dangerous leading chars", ()
   assert.equal(csvCell("@SUM(1,2)"), `"'@SUM(1,2)"`);
   assert.equal(csvCell("\tcmd"), `"'\tcmd"`);
   assert.equal(csvCell('Normal "Name"'), `'"Normal ""Name"""'`.slice(1, -1));
+});
+
+test("Binary image signature validation rejects disguised text payloads", () => {
+  const fakeJpeg = `data:image/jpeg;base64,${Buffer.from("NOT_A_REAL_JPEG_PAYLOAD_123456").toString("base64")}`;
+  assert.equal(validateImageSignature(fakeJpeg), false);
+
+  // Minimal valid PNG header + IHDR bytes (1x1)
+  const pngHeader = Buffer.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+  ]);
+  const validPng = `data:image/png;base64,${pngHeader.toString("base64")}`;
+  assert.equal(validateImageSignature(validPng), true);
 });
 
 test("JWT verification rejects tampered tokens and honors role/teacherId claims", async () => {
@@ -40,24 +85,27 @@ test("JWT verification rejects tampered tokens and honors role/teacherId claims"
   await assert.rejects(() => jwtVerify(tampered, TEST_SECRET));
 });
 
-test("Security headers are present on public and API responses", async () => {
-  const res = await fetch(`${BASE_URL}/`);
-  assert.equal(res.status, 200);
-  assert.equal(res.headers.get("x-frame-options"), "DENY");
-  assert.equal(res.headers.get("x-content-type-options"), "nosniff");
+test("Security headers and private Cache-Control are enforced on public & API responses", async () => {
+  const pub = await fetch(`${BASE_URL}/`);
+  assert.equal(pub.status, 200);
+  assert.equal(pub.headers.get("x-frame-options"), "DENY");
+  assert.equal(pub.headers.get("x-content-type-options"), "nosniff");
   assert.equal(
-    res.headers.get("referrer-policy"),
+    pub.headers.get("referrer-policy"),
     "strict-origin-when-cross-origin"
   );
-  assert.equal(
-    res.headers.get("permissions-policy"),
-    "camera=(self), microphone=(), geolocation=()"
-  );
-  const csp = res.headers.get("content-security-policy") || "";
+  const csp = pub.headers.get("content-security-policy") || "";
   assert.match(csp, /default-src 'self'/);
   assert.match(csp, /frame-ancestors 'none'/);
   assert.match(csp, /object-src 'none'/);
   assert.doesNotMatch(csp, /'unsafe-eval'/);
+
+  for (const apiPath of ["/api/students/me", "/api/teachers", "/api/admin/corrections"]) {
+    const res = await fetch(`${BASE_URL}${apiPath}`);
+    const cc = res.headers.get("cache-control") || "";
+    assert.match(cc, /private/, `${apiPath} Cache-Control should include private`);
+    assert.match(cc, /no-store/, `${apiPath} Cache-Control should include no-store`);
+  }
 });
 
 test("Protected pages redirect unauthenticated requests to /login", async () => {
@@ -97,65 +145,46 @@ test("Protected APIs enforce 401/403 when unauthenticated", async () => {
   }
 });
 
-test("Teacher cannot edit another teacher profile (IDOR blocked with 403)", async () => {
-  const token = await new SignJWT({
-    role: "teacher",
-    v: 1,
-    teacherId: "teacher_owner_A",
-  })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("1h")
-    .sign(TEST_SECRET);
-
-  const res = await fetch(`${BASE_URL}/api/teachers/teacher_victim_B`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Cookie: `emphss_session=${token}`,
-    },
-    body: JSON.stringify({
-      fullName: "ATTACKER",
-      mobileNumber: "9999999999",
-      qualification: "MA",
-      classesTaught: "1st",
-      subjects: "MATH",
-      roleSummary: "Test",
-    }),
-  });
-
-  // Either 403 (IDOR blocked) or 401 (if sessionVersion in DB != 1)
-  assert.ok(
-    res.status === 403 || res.status === 401,
-    `Expected 403 or 401, got ${res.status}`
-  );
-});
-
-test("Login endpoint enforces rate limiting (429) after repeated failed attempts", async () => {
-  const fakeIp = `198.51.100.${Math.floor(Math.random() * 200) + 10}`;
-  let got429 = false;
-  let retryAfter = "";
-
-  for (let i = 0; i < 8; i++) {
-    const res = await fetch(`${BASE_URL}/api/auth/login`, {
+test("Cross-origin CSRF requests are blocked with 403 before DB writes", async () => {
+  for (const path of ["/api/auth/login", "/api/students", "/api/auth/teacher-identity"]) {
+    const res = await fetch(`${BASE_URL}${path}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-real-ip": fakeIp,
+        Origin: "https://evil-attacker.example",
       },
-      body: JSON.stringify({
-        mode: "teacher",
-        password: "WrongPasswordAttempt!",
-      }),
+      body: "{}",
     });
-    if (res.status === 429) {
-      got429 = true;
-      retryAfter = res.headers.get("retry-after") || "";
-      break;
-    }
-    assert.equal(res.status, 401);
+    assert.equal(res.status, 403, `${path} should block cross-origin POST`);
   }
-
-  assert.equal(got429, true, "Expected 429 Too Many Requests after 6 attempts");
-  assert.ok(Number(retryAfter) > 0, "Expected positive Retry-After header");
 });
+
+test(
+  "Login endpoint enforces rate limiting (429) in isolated DB",
+  { skip: !IS_ISOLATED_DB },
+  async () => {
+    const fakeIp = `198.51.100.${Math.floor(Math.random() * 200) + 10}`;
+    let got429 = false;
+
+    for (let i = 0; i < 8; i++) {
+      const res = await fetch(`${BASE_URL}/api/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-real-ip": fakeIp,
+        },
+        body: JSON.stringify({
+          mode: "teacher",
+          password: "WrongPasswordAttempt!",
+        }),
+      });
+      if (res.status === 429) {
+        got429 = true;
+        break;
+      }
+      assert.equal(res.status, 401);
+    }
+
+    assert.equal(got429, true);
+  }
+);

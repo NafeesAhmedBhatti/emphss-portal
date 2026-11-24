@@ -19,10 +19,10 @@ import {
 import {
   CLASS_ORDER,
   GENDER_OPTIONS,
+  TRANSPORT_ROUTES,
   getSubjectsForClass,
 } from "@/lib/constants";
 import { compressStudentPhoto } from "@/lib/image-utils";
-import { IdCardPreview } from "@/components/IdCardPreview";
 import { DobPicker } from "@/components/DobPicker";
 
 interface FormState {
@@ -38,6 +38,7 @@ interface FormState {
   vehicleRoute: string;
   subjects: string[];
   photoData: string;
+  parentConsent: boolean;
 }
 
 interface SubmittedStudent {
@@ -71,6 +72,7 @@ const INITIAL_FORM: FormState = {
   vehicleRoute: "",
   subjects: [],
   photoData: "",
+  parentConsent: false,
 };
 
 export function StudentRegistrationForm({
@@ -149,6 +151,9 @@ export function StudentRegistrationForm({
     ) {
       return "Please enter the school bus/van route or stop name.";
     }
+    if (!form.parentConsent) {
+      return "Please confirm parent or guardian consent before submitting.";
+    }
     return null;
   }
 
@@ -218,33 +223,52 @@ export function StudentRegistrationForm({
           </div>
         </div>
 
-        <IdCardPreview
-          card={{
-            type: "student",
-            idNumber: submittedStudent.referenceId,
-            name: submittedStudent.studentName,
-            photoData: submittedStudent.photoData,
-            primaryBadge: `Class: ${submittedStudent.currentClass}`,
-            sessionOrRole: `Session ${submittedStudent.academicYear}`,
-            fields: [
-              { label: "Father's Name", value: submittedStudent.fatherName },
-              { label: "Mother's Name", value: submittedStudent.motherName },
-              {
-                label: "Date of Birth",
-                value: `${submittedStudent.dateOfBirth} (${submittedStudent.gender})`,
-              },
-              { label: "Mobile Number", value: submittedStudent.mobileNumber },
-              { label: "Address", value: submittedStudent.address },
-              {
-                label: "Transport",
-                value:
-                  submittedStudent.transportMode === "School Transport"
-                    ? `${submittedStudent.vehicleRoute}`
-                    : "Local",
-              },
-            ],
-          }}
-        />
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <div className="flex flex-col items-center text-center">
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">
+              Pending Teacher Approval
+            </span>
+            <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Your Student Reference ID
+            </p>
+            <p className="font-heading mt-1 text-3xl font-extrabold tracking-wide text-[#0F2942] sm:text-4xl">
+              {submittedStudent.referenceId}
+            </p>
+            <p className="mt-2 text-xs text-slate-500">
+              Please write down or screenshot this Reference ID.
+            </p>
+          </div>
+
+          <dl className="mt-6 grid grid-cols-2 gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-xs sm:text-sm">
+            <div>
+              <dt className="text-slate-500">Student Name</dt>
+              <dd className="font-bold text-[#0F2942]">
+                {submittedStudent.studentName}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-slate-500">Class &amp; Session</dt>
+              <dd className="font-bold text-[#0F2942]">
+                {submittedStudent.currentClass} ({submittedStudent.academicYear})
+              </dd>
+            </div>
+            <div className="col-span-2">
+              <dt className="text-slate-500">Father&apos;s Name</dt>
+              <dd className="font-bold text-[#0F2942]">
+                {submittedStudent.fatherName}
+              </dd>
+            </div>
+          </dl>
+
+          <div className="mt-5 flex justify-center">
+            <Link
+              href="/student"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#0F2942] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#163B5E]"
+            >
+              Check Status at My ID Card
+            </Link>
+          </div>
+        </div>
 
         <p className="no-print rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-center text-xs text-amber-900">
           Note: If any correction is needed later, please share your{" "}
@@ -616,20 +640,67 @@ export function StudentRegistrationForm({
             </div>
 
             {form.transportMode === "School Transport" && (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
-                <label className="mb-1.5 block text-sm font-semibold text-[#0F2942]">
-                  Vehicle / Route / Bus Stop Name *
+              <div className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+                <label className="block text-sm font-semibold text-[#0F2942]">
+                  Select Your Bus / Van Stop (Route) *
                 </label>
-                <input
-                  type="text"
-                  value={form.vehicleRoute}
-                  onChange={(e) => updateField("vehicleRoute", e.target.value)}
-                  placeholder="e.g., Bus 2 / Bawli East / Main Chowk"
-                  className="w-full rounded-xl border border-amber-300 bg-white px-4 py-3 text-base text-slate-900 outline-none focus:border-[#0F2942] focus:ring-2 focus:ring-[#0F2942]/15"
-                />
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {TRANSPORT_ROUTES.map((route) => {
+                    const selected = form.vehicleRoute === route;
+                    return (
+                      <button
+                        key={route}
+                        type="button"
+                        onClick={() => updateField("vehicleRoute", route)}
+                        className={`rounded-xl border px-3 py-2.5 text-xs font-bold transition-all ${
+                          selected
+                            ? "border-[#0F2942] bg-[#0F2942] text-amber-300 shadow-xs"
+                            : "border-amber-200 bg-white text-[#0F2942] hover:border-[#0F2942]/40 hover:bg-amber-50"
+                        }`}
+                      >
+                        {route}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">
+                    Or type another stop name if not listed above
+                  </label>
+                  <input
+                    type="text"
+                    value={form.vehicleRoute}
+                    onChange={(e) => updateField("vehicleRoute", e.target.value)}
+                    placeholder="Select a route above or type stop name"
+                    className="w-full rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-[#0F2942] focus:ring-2 focus:ring-[#0F2942]/15"
+                  />
+                </div>
               </div>
             )}
           </div>
+        </div>
+
+        {/* Parent Consent & Privacy Notice */}
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xs sm:p-6">
+          <label className="flex cursor-pointer items-start gap-3">
+            <input
+              type="checkbox"
+              checked={form.parentConsent}
+              onChange={(e) => updateField("parentConsent", e.target.checked)}
+              className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-[#0F2942] focus:ring-[#0F2942]"
+            />
+            <span className="text-xs leading-relaxed text-slate-600 sm:text-sm">
+              <strong className="text-[#0F2942]">
+                Parent / Guardian Consent:
+              </strong>{" "}
+              I confirm that I am the parent or legal guardian of this student
+              and consent to EMPHSS Bawli collecting these details and
+              photograph for school registration, Digital ID card generation,
+              transport coordination, and academic records. Corrections can be
+              requested via <strong>My ID Card</strong>, and record deletion can
+              be requested through the school office.
+            </span>
+          </label>
         </div>
 
         {/* Submit Button */}

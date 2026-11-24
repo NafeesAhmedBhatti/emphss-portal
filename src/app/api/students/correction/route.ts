@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStudentSession } from "@/lib/auth";
+import { privateJson, verifySameOrigin } from "@/lib/http";
 
 const ALLOWED_FIELDS = new Set([
   "studentName",
@@ -15,7 +15,7 @@ const ALLOWED_FIELDS = new Set([
 export async function GET() {
   const stuSession = await getStudentSession();
   if (!stuSession) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    return privateJson({ error: "Unauthorized." }, { status: 401 });
   }
 
   const requests = await prisma.correctionRequest.findMany({
@@ -23,13 +23,17 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json({ requests });
+  return privateJson({ requests });
 }
 
 export async function POST(request: Request) {
+  if (!verifySameOrigin(request)) {
+    return privateJson({ error: "Invalid request origin." }, { status: 403 });
+  }
+
   const stuSession = await getStudentSession();
   if (!stuSession) {
-    return NextResponse.json(
+    return privateJson(
       { error: "Please open your Student ID profile first." },
       { status: 401 }
     );
@@ -50,7 +54,7 @@ export async function POST(request: Request) {
       requestedValue.length > 250 ||
       reason.length > 500
     ) {
-      return NextResponse.json(
+      return privateJson(
         {
           error:
             "Please select a valid field and enter a concise correction value (max 250 chars).",
@@ -65,7 +69,7 @@ export async function POST(request: Request) {
     });
 
     if (!student) {
-      return NextResponse.json(
+      return privateJson(
         { error: "Student record not found." },
         { status: 404 }
       );
@@ -83,10 +87,10 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json({ request: created }, { status: 201 });
+    return privateJson({ request: created }, { status: 201 });
   } catch (error) {
     console.error("Create correction request error:", error);
-    return NextResponse.json(
+    return privateJson(
       { error: "Unable to submit correction request." },
       { status: 500 }
     );

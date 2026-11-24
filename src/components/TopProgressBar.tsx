@@ -9,7 +9,8 @@ export function TopProgressBar() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    setLoading(false);
+    const id = requestAnimationFrame(() => setLoading(false));
+    return () => cancelAnimationFrame(id);
   }, [pathname, searchParams]);
 
   useEffect(() => {

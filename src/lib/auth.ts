@@ -12,6 +12,7 @@ export interface SessionPayload {
   email?: string;
   v?: number;
   teacherId?: string;
+  tv?: number;
 }
 
 export interface StudentSessionPayload {
@@ -50,6 +51,7 @@ export async function verifySessionToken(
         v: typeof payload.v === "number" ? payload.v : undefined,
         teacherId:
           typeof payload.teacherId === "string" ? payload.teacherId : undefined,
+        tv: typeof payload.tv === "number" ? payload.tv : undefined,
       };
     }
     return null;

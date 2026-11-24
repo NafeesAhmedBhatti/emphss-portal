@@ -1,10 +1,14 @@
-import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { SESSION_COOKIE_NAME, signSessionToken } from "@/lib/auth";
 import { checkRateLimit, getClientIp, resetRateLimit } from "@/lib/rate-limit";
+import { privateJson, verifySameOrigin } from "@/lib/http";
 
 export async function POST(request: Request) {
+  if (!verifySameOrigin(request)) {
+    return privateJson({ error: "Invalid request origin." }, { status: 403 });
+  }
+
   try {
     const ip = getClientIp(request);
     const body = await request.json();
@@ -14,7 +18,7 @@ export async function POST(request: Request) {
       typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
 
     if (!password) {
-      return NextResponse.json(
+      return privateJson(
         { error: "Please enter your password." },
         { status: 400 }
       );
@@ -29,7 +33,7 @@ export async function POST(request: Request) {
 
     if (!ipRl.allowed || !modeRl.allowed) {
       const retryAfterSec = Math.max(ipRl.retryAfterSec, modeRl.retryAfterSec);
-      return NextResponse.json(
+      return privateJson(
         {
           error: `Too many login attempts. Please wait ${Math.ceil(
             retryAfterSec / 60
@@ -47,7 +51,7 @@ export async function POST(request: Request) {
     });
 
     if (!settings) {
-      return NextResponse.json(
+      return privateJson(
         { error: "School settings are not initialized." },
         { status: 500 }
       );
@@ -56,7 +60,7 @@ export async function POST(request: Request) {
     if (mode === "teacher") {
       const valid = await bcrypt.compare(password, settings.teacherAccessHash);
       if (!valid) {
-        return NextResponse.json(
+        return privateJson(
           { error: "Invalid Teacher Access Password. Please check with the School Admin." },
           { status: 401 }
         );
@@ -68,7 +72,7 @@ export async function POST(request: Request) {
         role: "teacher",
         v: settings.sessionVersion,
       });
-      const response = NextResponse.json({
+      const response = privateJson({
         success: true,
         role: "teacher",
         redirectTo: "/teacher/dashboard",
@@ -87,7 +91,7 @@ export async function POST(request: Request) {
 
     // Admin login
     if (!email || email !== settings.adminEmail.toLowerCase()) {
-      return NextResponse.json(
+      return privateJson(
         { error: "Invalid admin email or password." },
         { status: 401 }
       );
@@ -98,7 +102,7 @@ export async function POST(request: Request) {
       settings.adminPasswordHash
     );
     if (!validAdmin) {
-      return NextResponse.json(
+      return privateJson(
         { error: "Invalid admin email or password." },
         { status: 401 }
       );
@@ -112,7 +116,7 @@ export async function POST(request: Request) {
       v: settings.sessionVersion,
     });
 
-    const response = NextResponse.json({
+    const response = privateJson({
       success: true,
       role: "admin",
       redirectTo: "/admin",
@@ -129,7 +133,7 @@ export async function POST(request: Request) {
     return response;
   } catch (error) {
     console.error("Login error:", error);
-    return NextResponse.json(
+    return privateJson(
       { error: "Unable to sign in right now. Please try again." },
       { status: 500 }
     );

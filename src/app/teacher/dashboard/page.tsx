@@ -11,54 +11,103 @@ export default async function TeacherDashboardPage() {
     redirect("/login?tab=teacher");
   }
 
-  const [teachers, activeStudents, pendingStudents] = await Promise.all([
-    prisma.teacher.findMany({
-      where: { isActive: true },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.student.findMany({
-      where: { status: "Active" },
-      orderBy: [{ currentClass: "asc" }, { studentName: "asc" }],
-      select: {
-        id: true,
-        referenceId: true,
-        studentName: true,
-        fatherName: true,
-        motherName: true,
-        currentClass: true,
-        gender: true,
-        mobileNumber: true,
-        address: true,
-        transportMode: true,
-        vehicleRoute: true,
-        photoData: true,
-      },
-    }),
-    prisma.student.findMany({
-      where: { status: "Pending" },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        referenceId: true,
-        studentName: true,
-        fatherName: true,
-        motherName: true,
-        currentClass: true,
-        gender: true,
-        dateOfBirth: true,
-        mobileNumber: true,
-        address: true,
-        transportMode: true,
-        vehicleRoute: true,
-        photoData: true,
-      },
-    }),
-  ]);
+  const now = new Date();
+  const teachers = await prisma.teacher.findMany({
+    where: { isActive: true },
+    orderBy: { createdAt: "desc" },
+  });
 
-  const serializedTeachers = teachers.map((t) => ({
-    ...t,
-    createdAt: t.createdAt.toISOString(),
-  }));
+  const verifiedTeacher =
+    session.role === "teacher" && session.teacherId
+      ? teachers.find(
+          (t) => t.id === session.teacherId && t.pinVersion === session.tv
+        ) ?? null
+      : null;
+
+  const isAuthorizedForData =
+    session.role === "admin" || Boolean(verifiedTeacher);
+
+  const pendingWhere =
+    session.role === "admin"
+      ? { status: "Pending" }
+      : verifiedTeacher?.formTeacherClass
+      ? { status: "Pending", currentClass: verifiedTeacher.formTeacherClass }
+      : null;
+
+  const [activeStudents, pendingStudents] = isAuthorizedForData
+    ? await Promise.all([
+        prisma.student.findMany({
+          where: { status: "Active" },
+          orderBy: [{ currentClass: "asc" }, { studentName: "asc" }],
+          select: {
+            id: true,
+            referenceId: true,
+            studentName: true,
+            fatherName: true,
+            motherName: true,
+            currentClass: true,
+            gender: true,
+            mobileNumber: true,
+            address: true,
+            transportMode: true,
+            vehicleRoute: true,
+            photoData: true,
+          },
+        }),
+        pendingWhere
+          ? prisma.student.findMany({
+              where: pendingWhere,
+              orderBy: { createdAt: "desc" },
+              select: {
+                id: true,
+                referenceId: true,
+                studentName: true,
+                fatherName: true,
+                motherName: true,
+                gender: true,
+                dateOfBirth: true,
+                mobileNumber: true,
+                currentClass: true,
+                address: true,
+                transportMode: true,
+                vehicleRoute: true,
+                photoData: true,
+              },
+            })
+          : Promise.resolve([]),
+      ])
+    : [[], []];
+
+  // Never expose teacher PII (mobile/address/parents/photo) to an unbound shared-passcode session
+  const serializedTeachers = teachers.map(
+    ({ pinHash, enrollmentCodeHash, enrollmentCodeExpiresAt, ...t }) => {
+      const hasPin = Boolean(pinHash);
+      const hasEnrollmentCode = Boolean(
+        enrollmentCodeHash &&
+          enrollmentCodeExpiresAt &&
+          enrollmentCodeExpiresAt > now
+      );
+      if (!isAuthorizedForData) {
+        return {
+          ...t,
+          fatherName: "",
+          motherName: "",
+          address: "",
+          mobileNumber: "",
+          photoData: null,
+          hasPin,
+          hasEnrollmentCode,
+          createdAt: t.createdAt.toISOString(),
+        };
+      }
+      return {
+        ...t,
+        hasPin,
+        hasEnrollmentCode,
+        createdAt: t.createdAt.toISOString(),
+      };
+    }
+  );
 
   return (
     <TeacherPortalClient
@@ -66,6 +115,7 @@ export default async function TeacherDashboardPage() {
       students={activeStudents}
       initialPendingStudents={pendingStudents}
       role={session.role}
+      initialVerifiedTeacherId={verifiedTeacher?.id ?? ""}
     />
   );
 }

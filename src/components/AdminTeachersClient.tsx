@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   BookOpen,
   Briefcase,
+  KeyRound,
   Phone,
   Trash2,
   User,
@@ -18,6 +19,30 @@ export function AdminTeachersClient({
   initialTeachers: TeacherRecord[];
 }) {
   const [teachers, setTeachers] = useState<TeacherRecord[]>(initialTeachers);
+  const [issuedCodeBanner, setIssuedCodeBanner] = useState<{
+    name: string;
+    code: string;
+  } | null>(null);
+
+  async function handleIssueEnrollmentCode(teacher: TeacherRecord) {
+    const res = await fetch(`/api/teachers/${teacher.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "issue_enrollment_code" }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setTeachers((prev) =>
+        prev.map((t) => (t.id === teacher.id ? data.teacher : t))
+      );
+      if (data.enrollmentCode) {
+        setIssuedCodeBanner({
+          name: `${teacher.fullName} (${teacher.teacherCode})`,
+          code: data.enrollmentCode,
+        });
+      }
+    }
+  }
 
   async function handleToggleActive(teacher: TeacherRecord) {
     const res = await fetch(`/api/teachers/${teacher.id}`, {
@@ -76,6 +101,26 @@ export function AdminTeachersClient({
           Add / Edit in Teacher Portal
         </Link>
       </div>
+
+      {issuedCodeBanner && (
+        <div className="flex flex-col justify-between gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-950 sm:flex-row sm:items-center">
+          <div>
+            <p className="font-bold">
+              24-Hour Single-Use Enrollment Code for {issuedCodeBanner.name}:
+            </p>
+            <p className="mt-1 font-mono text-base font-extrabold tracking-wider text-[#0F2942]">
+              {issuedCodeBanner.code}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIssuedCodeBanner(null)}
+            className="rounded-xl border border-amber-300 bg-white px-3 py-1.5 font-bold text-amber-900 hover:bg-amber-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {teachers.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
@@ -137,6 +182,15 @@ export function AdminTeachersClient({
                 </div>
 
                 <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleIssueEnrollmentCode(t)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                    title="Issue 24h Single-Use Enrollment Code / Reset PIN"
+                  >
+                    <KeyRound className="h-3.5 w-3.5" />
+                    Reset PIN
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleToggleActive(t)}

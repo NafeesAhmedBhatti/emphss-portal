@@ -1,20 +1,44 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { CLASS_ORDER } from "@/lib/constants";
+import { privateJson, verifySameOrigin } from "@/lib/http";
+import { canApproveClass, getAuthorizedTeacher } from "@/lib/teacher-authz";
 
 export async function GET(request: Request) {
   const session = await getSession();
   if (!session) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    return privateJson({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  const authz = await getAuthorizedTeacher(session);
+  if (!authz) {
+    return privateJson(
+      { error: "Please verify your Teacher Profile PIN first." },
+      { status: 403 }
+    );
   }
 
   const { searchParams } = new URL(request.url);
-  const className = (searchParams.get("className") || "").trim();
+  const requestedClass = (searchParams.get("className") || "").trim();
+
+  if (!authz.isAdmin) {
+    const formClass = authz.teacher?.formTeacherClass;
+    if (!formClass) {
+      return privateJson({ students: [] });
+    }
+    if (requestedClass && requestedClass !== formClass) {
+      return privateJson(
+        { error: "You can only view pending approvals for your own Form Teacher class." },
+        { status: 403 }
+      );
+    }
+  }
 
   const where: Record<string, string> = { status: "Pending" };
-  if (className) {
-    where.currentClass = className;
+  if (!authz.isAdmin && authz.teacher?.formTeacherClass) {
+    where.currentClass = authz.teacher.formTeacherClass;
+  } else if (requestedClass) {
+    where.currentClass = requestedClass;
   }
 
   const pendingStudents = await prisma.student.findMany({
@@ -38,13 +62,25 @@ export async function GET(request: Request) {
     },
   });
 
-  return NextResponse.json({ students: pendingStudents });
+  return privateJson({ students: pendingStudents });
 }
 
 export async function POST(request: Request) {
+  if (!verifySameOrigin(request)) {
+    return privateJson({ error: "Invalid request origin." }, { status: 403 });
+  }
+
   const session = await getSession();
   if (!session) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    return privateJson({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  const authz = await getAuthorizedTeacher(session);
+  if (!authz) {
+    return privateJson(
+      { error: "Please verify your Teacher Profile PIN first." },
+      { status: 403 }
+    );
   }
 
   try {
@@ -54,12 +90,29 @@ export async function POST(request: Request) {
     const className = typeof body.className === "string" ? body.className : "";
 
     if (action === "approve" && studentId) {
+      const target = await prisma.student.findUnique({
+        where: { id: studentId },
+        select: { id: true, currentClass: true, status: true },
+      });
+      if (!target || target.status !== "Pending") {
+        return privateJson(
+          { error: "Pending student not found or already processed." },
+          { status: 404 }
+        );
+      }
+      if (!canApproveClass(authz, target.currentClass)) {
+        return privateJson(
+          { error: "Only the assigned Form Teacher or Admin can approve this class." },
+          { status: 403 }
+        );
+      }
+
       const result = await prisma.student.updateMany({
         where: { id: studentId, status: "Pending" },
         data: { status: "Active" },
       });
       if (result.count === 0) {
-        return NextResponse.json(
+        return privateJson(
           { error: "Pending student not found or already processed." },
           { status: 404 }
         );
@@ -67,40 +120,63 @@ export async function POST(request: Request) {
       const updated = await prisma.student.findUnique({
         where: { id: studentId },
       });
-      return NextResponse.json({ success: true, student: updated });
+      return privateJson({ success: true, student: updated });
     }
 
     if (action === "approve_all" && className) {
       if (!CLASS_ORDER.includes(className as (typeof CLASS_ORDER)[number])) {
-        return NextResponse.json(
+        return privateJson(
           { error: "Invalid class name." },
           { status: 400 }
+        );
+      }
+      if (!canApproveClass(authz, className)) {
+        return privateJson(
+          { error: "Only the assigned Form Teacher or Admin can approve this class." },
+          { status: 403 }
         );
       }
       const result = await prisma.student.updateMany({
         where: { currentClass: className, status: "Pending" },
         data: { status: "Active" },
       });
-      return NextResponse.json({ success: true, count: result.count });
+      return privateJson({ success: true, count: result.count });
     }
 
     if (action === "reject" && studentId) {
-      const result = await prisma.student.deleteMany({
-        where: { id: studentId, status: "Pending" },
+      const target = await prisma.student.findUnique({
+        where: { id: studentId },
+        select: { id: true, currentClass: true, status: true },
       });
-      if (result.count === 0) {
-        return NextResponse.json(
+      if (!target || target.status !== "Pending") {
+        return privateJson(
           { error: "Only pending registrations can be rejected." },
           { status: 404 }
         );
       }
-      return NextResponse.json({ success: true });
+      if (!canApproveClass(authz, target.currentClass)) {
+        return privateJson(
+          { error: "Only the assigned Form Teacher or Admin can reject this class." },
+          { status: 403 }
+        );
+      }
+
+      const result = await prisma.student.deleteMany({
+        where: { id: studentId, status: "Pending" },
+      });
+      if (result.count === 0) {
+        return privateJson(
+          { error: "Only pending registrations can be rejected." },
+          { status: 404 }
+        );
+      }
+      return privateJson({ success: true });
     }
 
-    return NextResponse.json({ error: "Invalid action." }, { status: 400 });
+    return privateJson({ error: "Invalid action." }, { status: 400 });
   } catch (error) {
     console.error("Approval action error:", error);
-    return NextResponse.json(
+    return privateJson(
       { error: "Unable to process approval action." },
       { status: 500 }
     );

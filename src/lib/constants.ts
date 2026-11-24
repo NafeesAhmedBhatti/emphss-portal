@@ -41,6 +41,17 @@ export const TRANSPORT_OPTIONS = [
   { value: "School Transport", label: "School Transport (Van / Bus)" },
 ] as const;
 
+export const TRANSPORT_ROUTES = [
+  "Saj A",
+  "Saj B",
+  "Bhatia",
+  "Badakanna",
+  "Maharajpura",
+  "Lah",
+  "Dodasan Bala",
+  "Dodasan Pain",
+] as const;
+
 export const NOTICE_CATEGORIES = [
   "Admission",
   "Timing",

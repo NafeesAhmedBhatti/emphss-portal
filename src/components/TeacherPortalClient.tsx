@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -46,6 +46,8 @@ export interface TeacherRecord {
   subjects: string;
   roleSummary: string;
   photoData: string | null;
+  hasPin?: boolean;
+  hasEnrollmentCode?: boolean;
   isActive: boolean;
   createdAt: string;
 }
@@ -93,6 +95,7 @@ interface TeacherFormState {
   subjects: string;
   roleSummary: string;
   photoData: string;
+  pin: string;
 }
 
 const EMPTY_FORM: TeacherFormState = {
@@ -107,6 +110,7 @@ const EMPTY_FORM: TeacherFormState = {
   subjects: "",
   roleSummary: "",
   photoData: "",
+  pin: "",
 };
 
 export function TeacherPortalClient({
@@ -114,11 +118,13 @@ export function TeacherPortalClient({
   students: initialActiveStudents = [],
   initialPendingStudents = [],
   role,
+  initialVerifiedTeacherId = "",
 }: {
   initialTeachers: TeacherRecord[];
   students?: TeacherStudentLookupItem[];
   initialPendingStudents?: PendingStudentItem[];
   role: "teacher" | "admin";
+  initialVerifiedTeacherId?: string;
 }) {
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -144,8 +150,19 @@ export function TeacherPortalClient({
     null
   );
 
-  // Student Lookup (Read-only): defaults to teacher's assigned classes unless searching
+  const [verifiedTeacherId, setVerifiedTeacherId] = useState<string>(
+    initialVerifiedTeacherId
+  );
+  const [pinPrompt, setPinPrompt] = useState<{
+    teacher: TeacherRecord;
+    pinInput: string;
+    enrollmentCodeInput: string;
+    error: string;
+    busy: boolean;
+  } | null>(null);
+
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>(() => {
+    if (initialVerifiedTeacherId) return initialVerifiedTeacherId;
     if (typeof window !== "undefined") {
       return window.localStorage.getItem("emphss_active_teacher_id") || "";
     }
@@ -160,28 +177,102 @@ export function TeacherPortalClient({
   );
 
   function selectActiveTeacher(id: string) {
-    setSelectedTeacherId(id);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("emphss_active_teacher_id", id);
+    const target = teachers.find((t) => t.id === id);
+    if (!target) return;
+
+    if (role === "admin" || id === verifiedTeacherId) {
+      setSelectedTeacherId(id);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("emphss_active_teacher_id", id);
+      }
+      if (role === "admin") {
+        fetch("/api/auth/teacher-identity", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ teacherId: id }),
+        }).catch(() => {});
+      }
+      return;
     }
-    if (id) {
-      fetch("/api/auth/teacher-identity", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teacherId: id }),
-      }).catch(() => {});
-    }
+
+    // Require PIN (or Admin-issued Enrollment Code + new PIN) before switching
+    setPinPrompt({
+      teacher: target,
+      pinInput: "",
+      enrollmentCodeInput: "",
+      error: "",
+      busy: false,
+    });
   }
 
-  useEffect(() => {
-    if (activeTeacher?.id) {
-      fetch("/api/auth/teacher-identity", {
+  async function handleConfirmPin(e: React.FormEvent) {
+    e.preventDefault();
+    if (!pinPrompt) return;
+    const val = pinPrompt.pinInput.trim();
+    const enroll = pinPrompt.enrollmentCodeInput.trim().toUpperCase();
+    if (val.length < 4) {
+      setPinPrompt((p) =>
+        p ? { ...p, error: "Please enter at least 4 characters." } : null
+      );
+      return;
+    }
+    if (!pinPrompt.teacher.hasPin && !enroll) {
+      setPinPrompt((p) =>
+        p
+          ? {
+              ...p,
+              error: "Please enter the single-use Enrollment Code from Admin.",
+            }
+          : null
+      );
+      return;
+    }
+
+    setPinPrompt((p) => (p ? { ...p, busy: true, error: "" } : null));
+    try {
+      const payload = pinPrompt.teacher.hasPin
+        ? { teacherId: pinPrompt.teacher.id, pin: val }
+        : {
+            teacherId: pinPrompt.teacher.id,
+            enrollmentCode: enroll,
+            newPin: val,
+          };
+      const res = await fetch("/api/auth/teacher-identity", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teacherId: activeTeacher.id }),
-      }).catch(() => {});
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPinPrompt((p) =>
+          p
+            ? {
+                ...p,
+                busy: false,
+                error: data.error || "Unable to verify Teacher PIN.",
+              }
+            : null
+        );
+        return;
+      }
+
+      const verifiedId = pinPrompt.teacher.id;
+      setTeachers((prev) =>
+        prev.map((t) => (t.id === verifiedId ? { ...t, hasPin: true } : t))
+      );
+      setVerifiedTeacherId(verifiedId);
+      setSelectedTeacherId(verifiedId);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("emphss_active_teacher_id", verifiedId);
+      }
+      setPinPrompt(null);
+      router.refresh();
+    } catch {
+      setPinPrompt((p) =>
+        p ? { ...p, busy: false, error: "Network error. Please try again." } : null
+      );
     }
-  }, [activeTeacher?.id]);
+  }
 
   const assignedClassSet = useMemo(() => {
     if (!activeTeacher) return new Set<string>();
@@ -276,6 +367,7 @@ export function TeacherPortalClient({
       subjects: teacher.subjects,
       roleSummary: teacher.roleSummary,
       photoData: teacher.photoData || "",
+      pin: "",
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -329,6 +421,11 @@ export function TeacherPortalClient({
       return;
     }
 
+    if (!editingId && role === "teacher" && form.pin.trim().length < 4) {
+      setError("Please set a Personal Teacher PIN (4–32 characters).");
+      return;
+    }
+
     setSaving(true);
     try {
       const payload = {
@@ -343,6 +440,7 @@ export function TeacherPortalClient({
         subjects: form.subjects.trim(),
         roleSummary: form.roleSummary.trim(),
         photoData: form.photoData,
+        ...(form.pin.trim() ? { pin: form.pin.trim() } : {}),
       };
 
       const url = editingId ? `/api/teachers/${editingId}` : "/api/teachers";
@@ -965,7 +1063,12 @@ export function TeacherPortalClient({
 
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                    Classes Taught *
+                    Classes Taught *{" "}
+                    {role !== "admin" && (
+                      <span className="font-normal text-slate-400">
+                        (Managed by Admin)
+                      </span>
+                    )}
                   </label>
                   <div className="flex flex-wrap gap-1.5">
                     {CLASS_ORDER.map((cls) => {
@@ -974,8 +1077,9 @@ export function TeacherPortalClient({
                         <button
                           key={cls}
                           type="button"
+                          disabled={role !== "admin"}
                           onClick={() => toggleClass(cls)}
-                          className={`rounded-lg border px-2.5 py-1 text-xs font-semibold transition-all ${
+                          className={`rounded-lg border px-2.5 py-1 text-xs font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-70 ${
                             selected
                               ? "border-[#0F2942] bg-[#0F2942] text-white"
                               : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
@@ -993,6 +1097,7 @@ export function TeacherPortalClient({
                     Form Teacher Of (1st Period Class)
                   </label>
                   <select
+                    disabled={role !== "admin"}
                     value={form.formTeacherClass}
                     onChange={(e) =>
                       setForm((p) => ({
@@ -1000,7 +1105,7 @@ export function TeacherPortalClient({
                         formTeacherClass: e.target.value,
                       }))
                     }
-                    className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-[#0F2942] focus:ring-2 focus:ring-[#0F2942]/15"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-[#0F2942] focus:ring-2 focus:ring-[#0F2942]/15 disabled:bg-slate-100 disabled:text-slate-500"
                   >
                     <option value="None">None (Subject Teacher Only)</option>
                     {CLASS_ORDER.map((cls) => (
@@ -1017,12 +1122,13 @@ export function TeacherPortalClient({
                   </label>
                   <input
                     type="text"
+                    disabled={role !== "admin"}
                     value={form.subjects}
                     onChange={(e) =>
                       setForm((p) => ({ ...p, subjects: e.target.value }))
                     }
                     placeholder="e.g., Mathematics, Physics"
-                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm outline-none focus:border-[#0F2942] focus:ring-2 focus:ring-[#0F2942]/15"
+                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm outline-none focus:border-[#0F2942] focus:ring-2 focus:ring-[#0F2942]/15 disabled:bg-slate-100 disabled:text-slate-500"
                   />
                 </div>
 
@@ -1037,6 +1143,29 @@ export function TeacherPortalClient({
                       setForm((p) => ({ ...p, roleSummary: e.target.value }))
                     }
                     placeholder="e.g., Class Teacher of 8th, Science Lab Coordinator"
+                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm outline-none focus:border-[#0F2942] focus:ring-2 focus:ring-[#0F2942]/15"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">
+                    {editingId
+                      ? "Update Personal Teacher PIN (Optional)"
+                      : "Personal Teacher PIN * (4–32 chars)"}
+                  </label>
+                  <input
+                    type="password"
+                    minLength={4}
+                    maxLength={32}
+                    value={form.pin}
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, pin: e.target.value }))
+                    }
+                    placeholder={
+                      editingId
+                        ? "Leave blank to keep current PIN"
+                        : "Set a private PIN only you know"
+                    }
                     className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm outline-none focus:border-[#0F2942] focus:ring-2 focus:ring-[#0F2942]/15"
                   />
                 </div>
@@ -1533,6 +1662,87 @@ export function TeacherPortalClient({
           <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-amber-600" />
         </Link>
       </footer>
+
+      {pinPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <form
+            onSubmit={handleConfirmPin}
+            className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl"
+          >
+            <h3 className="font-heading text-lg font-bold text-[#0F2942]">
+              {pinPrompt.teacher.hasPin
+                ? "Verify Personal Teacher PIN"
+                : "Enroll Teacher Profile"}
+            </h3>
+            <p className="mt-1 text-xs text-slate-600">
+              {pinPrompt.teacher.hasPin
+                ? `Enter the personal PIN for ${pinPrompt.teacher.fullName} (${pinPrompt.teacher.teacherCode}) to access this profile.`
+                : `Enter the single-use Enrollment Code issued by the School Admin and choose your personal 4–32 character PIN.`}
+            </p>
+            {!pinPrompt.teacher.hasPin && (
+              <input
+                type="text"
+                required
+                autoFocus
+                value={pinPrompt.enrollmentCodeInput}
+                onChange={(e) =>
+                  setPinPrompt((p) =>
+                    p
+                      ? {
+                          ...p,
+                          enrollmentCodeInput: e.target.value.toUpperCase(),
+                          error: "",
+                        }
+                      : null
+                  )
+                }
+                placeholder="Admin Enrollment Code (e.g., A1B2C3D4)"
+                className="mt-4 w-full rounded-xl border border-slate-300 px-3.5 py-2.5 font-mono text-sm uppercase outline-none focus:border-[#0F2942]"
+              />
+            )}
+            <input
+              type="password"
+              required
+              minLength={4}
+              maxLength={32}
+              autoFocus={Boolean(pinPrompt.teacher.hasPin)}
+              value={pinPrompt.pinInput}
+              onChange={(e) =>
+                setPinPrompt((p) =>
+                  p ? { ...p, pinInput: e.target.value, error: "" } : null
+                )
+              }
+              placeholder={
+                pinPrompt.teacher.hasPin ? "Enter PIN" : "Choose Personal PIN"
+              }
+              className="mt-3 w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm outline-none focus:border-[#0F2942]"
+            />
+            {pinPrompt.error && (
+              <p className="mt-2 text-xs font-semibold text-rose-600">
+                {pinPrompt.error}
+              </p>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={pinPrompt.busy}
+                onClick={() => setPinPrompt(null)}
+                className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={pinPrompt.busy}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-4 py-2 text-xs font-bold text-white hover:bg-[#163B5E] disabled:opacity-60"
+              >
+                {pinPrompt.busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Verify &amp; Switch
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

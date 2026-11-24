@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { CLASS_ORDER, GENDER_OPTIONS, PASSED_OUT_STATUS } from "@/lib/constants";
+import { privateJson, verifySameOrigin } from "@/lib/http";
 
 function cleanText(val: unknown): string {
   return typeof val === "string" ? val.trim().replace(/\s+/g, " ") : "";
@@ -11,9 +11,12 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  if (!verifySameOrigin(request)) {
+    return privateJson({ error: "Invalid request origin." }, { status: 403 });
+  }
   const session = await getSession();
   if (!session || session.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    return privateJson({ error: "Forbidden." }, { status: 403 });
   }
 
   try {
@@ -32,38 +35,38 @@ export async function PATCH(
     const vehicleRoute = cleanText(body.vehicleRoute).toUpperCase();
 
     if (!studentName || !fatherName || !motherName || !address) {
-      return NextResponse.json(
+      return privateJson(
         { error: "All name and address fields are required." },
         { status: 400 }
       );
     }
     if (!GENDER_OPTIONS.includes(gender as (typeof GENDER_OPTIONS)[number])) {
-      return NextResponse.json({ error: "Invalid gender." }, { status: 400 });
+      return privateJson({ error: "Invalid gender." }, { status: 400 });
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
-      return NextResponse.json(
+      return privateJson(
         { error: "Invalid date of birth." },
         { status: 400 }
       );
     }
     if (!/^\d{10}$/.test(mobileNumber)) {
-      return NextResponse.json(
+      return privateJson(
         { error: "Mobile number must be 10 digits." },
         { status: 400 }
       );
     }
     const validClasses = [...CLASS_ORDER, PASSED_OUT_STATUS];
     if (!validClasses.includes(currentClass)) {
-      return NextResponse.json({ error: "Invalid class." }, { status: 400 });
+      return privateJson({ error: "Invalid class." }, { status: 400 });
     }
     if (transportMode !== "Local" && transportMode !== "School Transport") {
-      return NextResponse.json(
+      return privateJson(
         { error: "Invalid transport mode." },
         { status: 400 }
       );
     }
     if (transportMode === "School Transport" && vehicleRoute.length < 2) {
-      return NextResponse.json(
+      return privateJson(
         { error: "Please enter the school transport route/stop." },
         { status: 400 }
       );
@@ -87,10 +90,10 @@ export async function PATCH(
       },
     });
 
-    return NextResponse.json({ student: updated });
+    return privateJson({ student: updated });
   } catch (error) {
     console.error("Admin student update error:", error);
-    return NextResponse.json(
+    return privateJson(
       { error: "Unable to update student record." },
       { status: 500 }
     );
@@ -98,21 +101,24 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  if (!verifySameOrigin(request)) {
+    return privateJson({ error: "Invalid request origin." }, { status: 403 });
+  }
   const session = await getSession();
   if (!session || session.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    return privateJson({ error: "Forbidden." }, { status: 403 });
   }
 
   try {
     const { id } = await context.params;
     await prisma.student.delete({ where: { id } });
-    return NextResponse.json({ success: true });
+    return privateJson({ success: true });
   } catch (error) {
     console.error("Admin student delete error:", error);
-    return NextResponse.json(
+    return privateJson(
       { error: "Unable to delete student record." },
       { status: 500 }
     );

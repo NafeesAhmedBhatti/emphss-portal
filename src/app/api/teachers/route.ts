@@ -1,33 +1,109 @@
-import { NextResponse } from "next/server";
+import crypto from "node:crypto";
+import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import {
-  getSession,
-  SESSION_COOKIE_NAME,
-  signSessionToken,
-} from "@/lib/auth";
+import { getSession } from "@/lib/auth";
+import { privateJson, verifySameOrigin } from "@/lib/http";
+import { validateStudentPhotoDataUrl } from "@/lib/image-validation";
+import { getAuthorizedTeacher } from "@/lib/teacher-authz";
 
 function cleanText(val: unknown): string {
   return typeof val === "string" ? val.trim().replace(/\s+/g, " ") : "";
 }
 
+const SAFE_TEACHER_SELECT = {
+  id: true,
+  teacherCode: true,
+  fullName: true,
+  fatherName: true,
+  motherName: true,
+  address: true,
+  mobileNumber: true,
+  qualification: true,
+  classesTaught: true,
+  formTeacherClass: true,
+  subjects: true,
+  roleSummary: true,
+  photoData: true,
+  isActive: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
 export async function GET() {
   const session = await getSession();
   if (!session) {
-    return NextResponse.json({ error: "Unauthorized access." }, { status: 401 });
+    return privateJson({ error: "Unauthorized access." }, { status: 401 });
+  }
+
+  // Unbound shared-passcode sessions only see minimal profile selector (no PII)
+  const authz = await getAuthorizedTeacher(session);
+  if (!authz) {
+    const directory = await prisma.teacher.findMany({
+      where: { isActive: true },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        teacherCode: true,
+        fullName: true,
+        pinHash: true,
+        enrollmentCodeHash: true,
+        enrollmentCodeExpiresAt: true,
+      },
+    });
+    const now = new Date();
+    return privateJson({
+      teachers: directory.map((t) => ({
+        id: t.id,
+        teacherCode: t.teacherCode,
+        fullName: t.fullName,
+        hasPin: Boolean(t.pinHash),
+        hasEnrollmentCode: Boolean(
+          t.enrollmentCodeHash &&
+            t.enrollmentCodeExpiresAt &&
+            t.enrollmentCodeExpiresAt > now
+        ),
+      })),
+    });
   }
 
   const teachers = await prisma.teacher.findMany({
     where: session.role === "admin" ? {} : { isActive: true },
     orderBy: { createdAt: "desc" },
+    select: {
+      ...SAFE_TEACHER_SELECT,
+      pinHash: true,
+      enrollmentCodeHash: true,
+      enrollmentCodeExpiresAt: true,
+    },
   });
 
-  return NextResponse.json({ teachers });
+  const now = new Date();
+  const safeTeachers = teachers.map(
+    ({ pinHash, enrollmentCodeHash, enrollmentCodeExpiresAt, ...rest }) => ({
+      ...rest,
+      hasPin: Boolean(pinHash),
+      hasEnrollmentCode: Boolean(
+        enrollmentCodeHash &&
+          enrollmentCodeExpiresAt &&
+          enrollmentCodeExpiresAt > now
+      ),
+    })
+  );
+
+  return privateJson({ teachers: safeTeachers });
 }
 
 export async function POST(request: Request) {
+  if (!verifySameOrigin(request)) {
+    return privateJson({ error: "Invalid request origin." }, { status: 403 });
+  }
+
   const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized access." }, { status: 401 });
+  if (!session || session.role !== "admin") {
+    return privateJson(
+      { error: "Only the School Admin can create teacher profiles." },
+      { status: 403 }
+    );
   }
 
   try {
@@ -42,73 +118,93 @@ export async function POST(request: Request) {
     const formTeacherClass = cleanText(body.formTeacherClass);
     const subjects = cleanText(body.subjects).toUpperCase();
     const roleSummary = cleanText(body.roleSummary);
+    const pin = typeof body.pin === "string" ? body.pin.trim() : "";
     const photoData =
       typeof body.photoData === "string" ? body.photoData.trim() : "";
 
     if (!fullName || fullName.length < 2) {
-      return NextResponse.json(
+      return privateJson(
         { error: "Please enter the teacher's full name." },
         { status: 400 }
       );
     }
     if (!fatherName || fatherName.length < 2) {
-      return NextResponse.json(
+      return privateJson(
         { error: "Please enter the father's name." },
         { status: 400 }
       );
     }
     if (!motherName || motherName.length < 2) {
-      return NextResponse.json(
+      return privateJson(
         { error: "Please enter the mother's name." },
         { status: 400 }
       );
     }
     if (!address || address.length < 2) {
-      return NextResponse.json(
+      return privateJson(
         { error: "Please enter the teacher's residential address / village." },
         { status: 400 }
       );
     }
     if (!/^\d{10}$/.test(mobileNumber)) {
-      return NextResponse.json(
+      return privateJson(
         { error: "Please enter a valid 10-digit mobile number." },
         { status: 400 }
       );
     }
     if (!qualification || qualification.length < 2) {
-      return NextResponse.json(
+      return privateJson(
         { error: "Please enter the teacher's qualification." },
         { status: 400 }
       );
     }
     if (!classesTaught) {
-      return NextResponse.json(
+      return privateJson(
         { error: "Please select at least one class taught." },
         { status: 400 }
       );
     }
     if (!subjects || subjects.length < 2) {
-      return NextResponse.json(
+      return privateJson(
         { error: "Please enter the subjects taught." },
         { status: 400 }
       );
     }
     if (!roleSummary || roleSummary.length < 2) {
-      return NextResponse.json(
+      return privateJson(
         { error: "Please enter a brief role or work summary." },
         { status: 400 }
       );
     }
-    const isSafeRasterImage =
-      photoData.startsWith("data:image/jpeg;base64,") ||
-      photoData.startsWith("data:image/png;base64,") ||
-      photoData.startsWith("data:image/webp;base64,");
-    if (photoData && (!isSafeRasterImage || photoData.length > 700_000)) {
-      return NextResponse.json(
-        { error: "Invalid or oversized photo file. Use JPG, PNG, or WebP." },
+
+    if (pin && (pin.length < 4 || pin.length > 32)) {
+      return privateJson(
+        { error: "Teacher PIN must be between 4 and 32 characters." },
         { status: 400 }
       );
     }
+
+    if (photoData) {
+      const photoCheck = validateStudentPhotoDataUrl(photoData);
+      if (!photoCheck.valid) {
+        return privateJson(
+          { error: photoCheck.error || "Invalid or oversized photo file." },
+          { status: 400 }
+        );
+      }
+    }
+
+    const pinHash = pin ? await bcrypt.hash(pin, 10) : null;
+    // If Admin didn't set a PIN upfront, issue a 24h single-use enrollment code
+    const rawEnrollmentCode = pin
+      ? null
+      : crypto.randomBytes(4).toString("hex").toUpperCase();
+    const enrollmentCodeHash = rawEnrollmentCode
+      ? await bcrypt.hash(rawEnrollmentCode, 10)
+      : null;
+    const enrollmentCodeExpiresAt = rawEnrollmentCode
+      ? new Date(Date.now() + 24 * 60 * 60_000)
+      : null;
 
     let teacher = null;
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -148,8 +244,12 @@ export async function POST(request: Request) {
             subjects,
             roleSummary,
             photoData: photoData || null,
+            pinHash,
+            enrollmentCodeHash,
+            enrollmentCodeExpiresAt,
             isActive: true,
           },
+          select: SAFE_TEACHER_SELECT,
         });
         break;
       } catch (err: unknown) {
@@ -168,26 +268,20 @@ export async function POST(request: Request) {
       throw new Error("Failed to allocate unique teacher code.");
     }
 
-    const response = NextResponse.json({ teacher }, { status: 201 });
-    if (session.role === "teacher") {
-      const token = await signSessionToken({
-        role: session.role,
-        email: session.email,
-        v: session.v,
-        teacherId: teacher.id,
-      });
-      response.cookies.set(SESSION_COOKIE_NAME, token, {
-        httpOnly: true,
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
-        path: "/",
-        maxAge: 60 * 60 * 24 * 30,
-      });
-    }
-    return response;
+    return privateJson(
+      {
+        teacher: {
+          ...teacher,
+          hasPin: Boolean(pinHash),
+          hasEnrollmentCode: Boolean(rawEnrollmentCode),
+        },
+        enrollmentCode: rawEnrollmentCode,
+      },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Create teacher error:", error);
-    return NextResponse.json(
+    return privateJson(
       { error: "Unable to save teacher profile. Please try again." },
       { status: 500 }
     );

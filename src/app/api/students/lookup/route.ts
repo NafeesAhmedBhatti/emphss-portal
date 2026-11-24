@@ -1,9 +1,13 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit, getClientIp, resetRateLimit } from "@/lib/rate-limit";
 import { signStudentToken, STUDENT_COOKIE_NAME } from "@/lib/auth";
+import { privateJson, verifySameOrigin } from "@/lib/http";
 
 export async function POST(request: Request) {
+  if (!verifySameOrigin(request)) {
+    return privateJson({ error: "Invalid request origin." }, { status: 403 });
+  }
+
   try {
     const ip = getClientIp(request);
     const body = await request.json();
@@ -23,7 +27,7 @@ export async function POST(request: Request) {
         : "";
 
     if (!referenceId || !dateOfBirth || !/^\d{10}$/.test(mobileNumber) || !motherName) {
-      return NextResponse.json(
+      return privateJson(
         {
           error:
             "Please enter Student ID, Date of Birth, 10-digit Mobile Number, and Mother's Name.",
@@ -35,13 +39,13 @@ export async function POST(request: Request) {
     const rateKey = `stu-lookup:${ip}:${referenceId}`;
     const rl = await checkRateLimit(rateKey, 5, 15 * 60_000);
     if (!rl.allowed) {
-      return NextResponse.json(
+      return privateJson(
         {
           error: `Too many failed attempts. Locked for ${Math.ceil(
             rl.retryAfterSec / 60
           )} minute(s) for security.`,
         },
-        { status: 429 }
+        { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } }
       );
     }
 
@@ -56,7 +60,7 @@ export async function POST(request: Request) {
       student.motherName.trim().toLowerCase() === motherName;
 
     if (!matches) {
-      return NextResponse.json(
+      return privateJson(
         {
           error:
             "Details did not match. Please verify your Student ID, Date of Birth, Parent Mobile Number, and Mother's Name.",
@@ -72,7 +76,10 @@ export async function POST(request: Request) {
       referenceId: student.referenceId,
     });
 
-    const response = NextResponse.json({ student });
+    const safeStudent =
+      student.status === "Pending" ? { ...student, photoData: null } : student;
+
+    const response = privateJson({ student: safeStudent });
     response.cookies.set(STUDENT_COOKIE_NAME, token, {
       httpOnly: true,
       sameSite: "lax",
@@ -83,18 +90,23 @@ export async function POST(request: Request) {
     return response;
   } catch (error) {
     console.error("Student lookup error:", error);
-    return NextResponse.json(
+    return privateJson(
       { error: "Unable to load student profile right now. Please try again." },
       { status: 500 }
     );
   }
 }
 
-export async function DELETE() {
-  const response = NextResponse.json({ success: true });
+export async function DELETE(request: Request) {
+  if (!verifySameOrigin(request)) {
+    return privateJson({ error: "Invalid request origin." }, { status: 403 });
+  }
+
+  const response = privateJson({ success: true });
   response.cookies.set(STUDENT_COOKIE_NAME, "", {
     httpOnly: true,
     sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 0,
   });

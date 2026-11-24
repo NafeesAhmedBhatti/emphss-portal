@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { PRIVATE_CACHE_HEADERS } from "@/lib/http";
 
 function csvCell(val: string | null | undefined): string {
   let str = String(val ?? "");
@@ -74,6 +75,7 @@ export async function GET(request: Request) {
   return new NextResponse(csvContent, {
     status: 200,
     headers: {
+      ...PRIVATE_CACHE_HEADERS,
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="EMPHSS-Students-Export.csv"`,
     },

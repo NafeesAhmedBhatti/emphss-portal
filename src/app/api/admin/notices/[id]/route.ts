@@ -1,14 +1,17 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { privateJson, verifySameOrigin } from "@/lib/http";
 
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  if (!verifySameOrigin(request)) {
+    return privateJson({ error: "Invalid request origin." }, { status: 403 });
+  }
   const session = await getSession();
   if (!session || session.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    return privateJson({ error: "Forbidden." }, { status: 403 });
   }
 
   try {
@@ -23,10 +26,10 @@ export async function PATCH(
       data,
     });
 
-    return NextResponse.json({ notice });
+    return privateJson({ notice });
   } catch (error) {
     console.error("Update notice error:", error);
-    return NextResponse.json(
+    return privateJson(
       { error: "Unable to update notice." },
       { status: 500 }
     );
@@ -34,21 +37,24 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  if (!verifySameOrigin(request)) {
+    return privateJson({ error: "Invalid request origin." }, { status: 403 });
+  }
   const session = await getSession();
   if (!session || session.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    return privateJson({ error: "Forbidden." }, { status: 403 });
   }
 
   try {
     const { id } = await context.params;
     await prisma.notice.delete({ where: { id } });
-    return NextResponse.json({ success: true });
+    return privateJson({ success: true });
   } catch (error) {
     console.error("Delete notice error:", error);
-    return NextResponse.json(
+    return privateJson(
       { error: "Unable to delete notice." },
       { status: 500 }
     );

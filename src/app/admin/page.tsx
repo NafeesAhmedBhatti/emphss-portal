@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { CLASS_ORDER } from "@/lib/constants";
+import { CLASS_ORDER, TRANSPORT_ROUTES } from "@/lib/constants";
 import { AdminShell } from "@/components/AdminShell";
 
 export const dynamic = "force-dynamic";
@@ -65,17 +65,27 @@ export default async function AdminOverviewPage() {
     count: activeStatsStudents.filter((s) => s.currentClass === cls).length,
   }));
 
-  // Group school transport routes
-  const routeMap = new Map<string, number>();
+  // Group school transport routes (standardize official routes + include any custom stops)
+  const routeCountByUpper = new Map<string, number>();
   for (const s of activeStatsStudents) {
     if (s.transportMode === "School Transport") {
-      const key = s.vehicleRoute?.trim() || "Unspecified Route";
-      routeMap.set(key, (routeMap.get(key) ?? 0) + 1);
+      const key = (s.vehicleRoute?.trim() || "Unspecified Route").toUpperCase();
+      routeCountByUpper.set(key, (routeCountByUpper.get(key) ?? 0) + 1);
     }
   }
-  const routeSummary = Array.from(routeMap.entries()).sort(
-    (a, b) => b[1] - a[1]
+
+  const officialUpperSet = new Set(
+    TRANSPORT_ROUTES.map((r) => r.toUpperCase())
   );
+  const officialRouteSummary = TRANSPORT_ROUTES.map((route) => ({
+    route,
+    count: routeCountByUpper.get(route.toUpperCase()) ?? 0,
+  }));
+  const otherRouteSummary = Array.from(routeCountByUpper.entries())
+    .filter(([upper]) => !officialUpperSet.has(upper))
+    .sort((a, b) => b[1] - a[1])
+    .map(([route, count]) => ({ route, count }));
+  const routeSummary = [...officialRouteSummary, ...otherRouteSummary];
 
   return (
     <AdminShell currentSession={settings?.currentSession ?? "2026-27"}>
@@ -92,6 +102,7 @@ export default async function AdminOverviewPage() {
         <div className="flex flex-wrap gap-2.5">
           <a
             href="/api/admin/students/export"
+            download="EMPHSS-Students-Export.csv"
             className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-[#0F2942] shadow-xs hover:bg-slate-50"
           >
             <Download className="h-4 w-4 text-amber-600" />
@@ -154,7 +165,7 @@ export default async function AdminOverviewPage() {
             {transportCount}
           </p>
           <p className="mt-1 text-xs text-slate-400">
-            {routeSummary.length} active route(s)
+            {routeSummary.filter((r) => r.count > 0).length} active route(s)
           </p>
         </div>
 
@@ -197,29 +208,34 @@ export default async function AdminOverviewPage() {
         </div>
 
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs lg:col-span-5">
-          <h2 className="font-heading flex items-center gap-2 text-base font-extrabold text-[#0F2942]">
-            <Bus className="h-5 w-5 text-amber-600" />
-            Transport Route Summary
-          </h2>
-          {routeSummary.length === 0 ? (
-            <p className="mt-4 text-sm text-slate-500">
-              No students registered under School Transport yet.
-            </p>
-          ) : (
-            <div className="mt-4 space-y-2.5">
-              {routeSummary.map(([route, count]) => (
-                <div
-                  key={route}
-                  className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2.5 text-sm"
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-heading flex items-center gap-2 text-base font-extrabold text-[#0F2942]">
+              <Bus className="h-5 w-5 text-amber-600" />
+              Transport Route Summary
+            </h2>
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-extrabold text-amber-900">
+              Total: {transportCount}
+            </span>
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
+            {routeSummary.map(({ route, count }) => (
+              <div
+                key={route}
+                className="flex items-center justify-between rounded-xl border border-slate-200/70 bg-slate-50 px-4 py-2.5 text-sm"
+              >
+                <span className="font-semibold text-slate-800">{route}</span>
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                    count > 0
+                      ? "bg-[#0F2942] text-amber-300"
+                      : "bg-slate-200 text-slate-600"
+                  }`}
                 >
-                  <span className="font-semibold text-slate-800">{route}</span>
-                  <span className="rounded-full bg-[#0F2942] px-2.5 py-0.5 text-xs font-bold text-amber-300">
-                    {count} student{count === 1 ? "" : "s"}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
+                  {count} student{count === 1 ? "" : "s"}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 

@@ -1,25 +1,29 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { NOTICE_CATEGORIES } from "@/lib/constants";
+import { privateJson, verifySameOrigin } from "@/lib/http";
 
 export async function GET() {
   const session = await getSession();
   if (!session || session.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    return privateJson({ error: "Forbidden." }, { status: 403 });
   }
 
   const notices = await prisma.notice.findMany({
     orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
   });
 
-  return NextResponse.json({ notices });
+  return privateJson({ notices });
 }
 
 export async function POST(request: Request) {
+  if (!verifySameOrigin(request)) {
+    return privateJson({ error: "Invalid request origin." }, { status: 403 });
+  }
+
   const session = await getSession();
   if (!session || session.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    return privateJson({ error: "Forbidden." }, { status: 403 });
   }
 
   try {
@@ -40,7 +44,7 @@ export async function POST(request: Request) {
       expireDays > 0 ? new Date(Date.now() + expireDays * 86400_000) : null;
 
     if (title.length < 3 || content.length < 5) {
-      return NextResponse.json(
+      return privateJson(
         { error: "Please enter both a notice title and description." },
         { status: 400 }
       );
@@ -57,10 +61,10 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json({ notice }, { status: 201 });
+    return privateJson({ notice }, { status: 201 });
   } catch (error) {
     console.error("Create notice error:", error);
-    return NextResponse.json(
+    return privateJson(
       { error: "Unable to publish notice." },
       { status: 500 }
     );

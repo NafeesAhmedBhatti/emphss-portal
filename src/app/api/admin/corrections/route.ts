@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { privateJson, verifySameOrigin } from "@/lib/http";
 
 const AUTO_UPDATABLE_FIELDS = new Set([
   "studentName",
@@ -14,27 +14,31 @@ const AUTO_UPDATABLE_FIELDS = new Set([
 export async function GET() {
   const session = await getSession();
   if (!session || session.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    return privateJson({ error: "Forbidden." }, { status: 403 });
   }
 
   const requests = await prisma.correctionRequest.findMany({
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
   });
 
-  return NextResponse.json({ requests });
+  return privateJson({ requests });
 }
 
 export async function PATCH(request: Request) {
+  if (!verifySameOrigin(request)) {
+    return privateJson({ error: "Invalid request origin." }, { status: 403 });
+  }
+
   const session = await getSession();
   if (!session || session.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    return privateJson({ error: "Forbidden." }, { status: 403 });
   }
 
   try {
     const body = await request.json();
     const id = typeof body.id === "string" ? body.id.trim() : "";
     if (body.action !== "Approve" && body.action !== "Reject") {
-      return NextResponse.json(
+      return privateJson(
         { error: "Invalid action. Expected Approve or Reject." },
         { status: 400 }
       );
@@ -45,13 +49,13 @@ export async function PATCH(request: Request) {
       where: { id },
     });
     if (!existing) {
-      return NextResponse.json(
+      return privateJson(
         { error: "Correction request not found." },
         { status: 404 }
       );
     }
     if (existing.status !== "Pending") {
-      return NextResponse.json(
+      return privateJson(
         { error: "This correction request has already been processed." },
         { status: 409 }
       );
@@ -64,7 +68,7 @@ export async function PATCH(request: Request) {
     ) {
       if (existing.fieldToCorrect === "dateOfBirth") {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(validatedValue)) {
-          return NextResponse.json(
+          return privateJson(
             { error: "Invalid date of birth format (expected YYYY-MM-DD)." },
             { status: 400 }
           );
@@ -72,14 +76,14 @@ export async function PATCH(request: Request) {
       } else if (existing.fieldToCorrect === "mobileNumber") {
         validatedValue = validatedValue.replace(/\D/g, "");
         if (!/^\d{10}$/.test(validatedValue)) {
-          return NextResponse.json(
+          return privateJson(
             { error: "Invalid 10-digit mobile number in correction request." },
             { status: 400 }
           );
         }
       } else {
         if (validatedValue.length < 2 || validatedValue.length > 250) {
-          return NextResponse.json(
+          return privateJson(
             { error: "Correction value must be between 2 and 250 characters." },
             { status: 400 }
           );
@@ -107,10 +111,10 @@ export async function PATCH(request: Request) {
       });
     });
 
-    return NextResponse.json({ request: updated });
+    return privateJson({ request: updated });
   } catch (error) {
     console.error("Update correction request error:", error);
-    return NextResponse.json(
+    return privateJson(
       { error: "Unable to process correction request." },
       { status: 500 }
     );
