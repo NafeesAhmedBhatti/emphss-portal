@@ -1,0 +1,129 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+model Student {
+  id            String   @id @default(cuid())
+  referenceId   String   @unique
+  studentName   String
+  fatherName    String
+  motherName    String
+  gender        String
+  dateOfBirth   String
+  mobileNumber  String
+  currentClass  String
+  academicYear  String   @default("2026-27")
+  address       String
+  transportMode String   // "Local" or "School Transport"
+  vehicleRoute  String?
+  subjects      String   @default("") // Comma-separated subjects
+  photoData     String?
+  status        String   @default("Active") // "Active" or "Passed Out"
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([currentClass])
+  @@index([transportMode])
+  @@index([studentName, dateOfBirth, mobileNumber])
+}
+
+model Teacher {
+  id               String   @id @default(cuid())
+  teacherCode      String   @unique
+  fullName         String
+  fatherName       String   @default("")
+  motherName       String   @default("")
+  address          String   @default("")
+  mobileNumber     String
+  qualification    String
+  classesTaught    String
+  formTeacherClass String?
+  subjects         String
+  roleSummary      String
+  photoData        String?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model AwardRoll {
+  id                 String   @id @default(cuid())
+  className          String
+  examName           String   @default("T1")
+  session            String   @default("2026-27")
+  section            String   @default("A")
+  maxMarksPerSubject Int      @default(50)
+  subjectsJson       String   // JSON array of subject names
+  marksJson          String   // JSON object: { [studentId]: { [subject]: string } }
+  updatedAt          DateTime @updatedAt
+  createdAt          DateTime @default(now())
+
+  @@unique([className, examName, session])
+}
+
+model Notice {
+  id        String    @id @default(cuid())
+  title     String
+  content   String
+  category  String    @default("General") // "Admission" | "Transport" | "Timing" | "General"
+  isPinned  Boolean   @default(false)
+  isActive  Boolean   @default(true)
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model SchoolSettings {
+  id                 String   @id @default("main")
+  schoolName         String   @default("English Medium Public Higher Secondary School, Bawli")
+  shortName          String   @default("EMPHSS")
+  currentSession     String   @default("2026-27")
+  adminEmail         String   @default("admin@emphss.edu.in")
+  adminPasswordHash  String
+  teacherAccessHash  String
+  teacherPasscodeRaw String   @default("[REDACTED]")
+  sessionVersion     Int      @default(1)
+  registrationOpen   Boolean  @default(true)
+  updatedAt          DateTime @updatedAt
+}
+
+model RateLimit {
+  key       String   @id
+  count     Int      @default(1)
+  resetAt   DateTime
+  updatedAt DateTime @updatedAt
+
+  @@index([resetAt])
+}
+
+model CorrectionRequest {
+  id             String   @id @default(cuid())
+  studentId      String
+  referenceId    String
+  studentName    String
+  fieldToCorrect String   // "studentName" | "fatherName" | "motherName" | "dateOfBirth" | "mobileNumber" | "address" | "Other"
+  requestedValue String
+  reason         String   @default("")
+  status         String   @default("Pending") // "Pending" | "Approved" | "Rejected"
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([status])
+  @@index([studentId])
+}
+
+model PromotionLog {
+  id             String   @id @default(cuid())
+  fromSession    String
+  toSession      String
+  promotedCount  Int
+  heldBackCount  Int
+  passedOutCount Int
+  createdAt      DateTime @default(now())
+}
