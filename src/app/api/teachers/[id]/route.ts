@@ -88,9 +88,19 @@ export async function PATCH(
     const address = cleanText(body.address).toUpperCase();
     const mobileNumber = cleanText(body.mobileNumber).replace(/\D/g, "");
     const qualification = cleanText(body.qualification).toUpperCase();
+    const classesTaught = cleanText(body.classesTaught);
+    const formTeacherClass = cleanText(body.formTeacherClass);
+    const subjects = cleanText(body.subjects).toUpperCase();
     const roleSummary = cleanText(body.roleSummary);
 
-    if (!fullName || !/^\d{10}$/.test(mobileNumber) || !qualification || !roleSummary) {
+    if (
+      !fullName ||
+      !/^\d{10}$/.test(mobileNumber) ||
+      !qualification ||
+      !classesTaught ||
+      !subjects ||
+      !roleSummary
+    ) {
       return privateJson(
         { error: "Please fill all required teacher profile fields accurately." },
         { status: 400 }
@@ -104,29 +114,17 @@ export async function PATCH(
       address,
       mobileNumber,
       qualification,
+      classesTaught,
+      formTeacherClass:
+        formTeacherClass && formTeacherClass !== "None"
+          ? formTeacherClass
+          : null,
+      subjects,
       roleSummary,
     };
 
-    // Only Admin may assign or change classesTaught, formTeacherClass, subjects, or isActive
-    if (session.role === "admin") {
-      const classesTaught = cleanText(body.classesTaught);
-      const formTeacherClass = cleanText(body.formTeacherClass);
-      const subjects = cleanText(body.subjects).toUpperCase();
-      if (!classesTaught || !subjects) {
-        return privateJson(
-          { error: "Classes taught and subjects are required." },
-          { status: 400 }
-        );
-      }
-      data.classesTaught = classesTaught;
-      data.formTeacherClass =
-        formTeacherClass && formTeacherClass !== "None"
-          ? formTeacherClass
-          : null;
-      data.subjects = subjects;
-      if (typeof body.isActive === "boolean") {
-        data.isActive = body.isActive;
-      }
+    if (session.role === "admin" && typeof body.isActive === "boolean") {
+      data.isActive = body.isActive;
     }
 
     if (typeof body.photoData === "string" && body.photoData.trim() !== "") {

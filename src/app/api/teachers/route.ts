@@ -1,7 +1,11 @@
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth";
+import {
+  getSession,
+  SESSION_COOKIE_NAME,
+  signSessionToken,
+} from "@/lib/auth";
 import { privateJson, verifySameOrigin } from "@/lib/http";
 import { validateStudentPhotoDataUrl } from "@/lib/image-validation";
 import { getAuthorizedTeacher } from "@/lib/teacher-authz";
@@ -99,11 +103,8 @@ export async function POST(request: Request) {
   }
 
   const session = await getSession();
-  if (!session || session.role !== "admin") {
-    return privateJson(
-      { error: "Only the School Admin can create teacher profiles." },
-      { status: 403 }
-    );
+  if (!session) {
+    return privateJson({ error: "Unauthorized access." }, { status: 401 });
   }
 
   try {
@@ -177,6 +178,12 @@ export async function POST(request: Request) {
       );
     }
 
+    if (session.role === "teacher" && (pin.length < 4 || pin.length > 32)) {
+      return privateJson(
+        { error: "Please choose a personal Teacher PIN (4–32 characters)." },
+        { status: 400 }
+      );
+    }
     if (pin && (pin.length < 4 || pin.length > 32)) {
       return privateJson(
         { error: "Teacher PIN must be between 4 and 32 characters." },
@@ -268,7 +275,7 @@ export async function POST(request: Request) {
       throw new Error("Failed to allocate unique teacher code.");
     }
 
-    return privateJson(
+    const response = privateJson(
       {
         teacher: {
           ...teacher,
@@ -279,6 +286,25 @@ export async function POST(request: Request) {
       },
       { status: 201 }
     );
+
+    if (session.role === "teacher") {
+      const token = await signSessionToken({
+        role: session.role,
+        email: session.email,
+        v: session.v,
+        teacherId: teacher.id,
+        tv: 1,
+      });
+      response.cookies.set(SESSION_COOKIE_NAME, token, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 30,
+      });
+    }
+
+    return response;
   } catch (error) {
     console.error("Create teacher error:", error);
     return privateJson(

@@ -467,6 +467,7 @@ export function TeacherPortalClient({
         setEditingId(null);
       } else {
         setTeachers((prev) => [data.teacher, ...prev]);
+        setVerifiedTeacherId(data.teacher.id);
         setSelectedTeacherId(data.teacher.id);
         if (typeof window !== "undefined") {
           window.localStorage.setItem("emphss_active_teacher_id", data.teacher.id);
@@ -475,6 +476,7 @@ export function TeacherPortalClient({
         setSuccess(
           `Teacher profile created! Your Teacher ID is ${data.teacher.teacherCode}.`
         );
+        router.refresh();
       }
       setForm(EMPTY_FORM);
     } catch {
@@ -1063,12 +1065,7 @@ export function TeacherPortalClient({
 
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                    Classes Taught *{" "}
-                    {role !== "admin" && (
-                      <span className="font-normal text-slate-400">
-                        (Managed by Admin)
-                      </span>
-                    )}
+                    Classes Taught *
                   </label>
                   <div className="flex flex-wrap gap-1.5">
                     {CLASS_ORDER.map((cls) => {
@@ -1077,9 +1074,8 @@ export function TeacherPortalClient({
                         <button
                           key={cls}
                           type="button"
-                          disabled={role !== "admin"}
                           onClick={() => toggleClass(cls)}
-                          className={`rounded-lg border px-2.5 py-1 text-xs font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-70 ${
+                          className={`rounded-lg border px-2.5 py-1 text-xs font-semibold transition-all ${
                             selected
                               ? "border-[#0F2942] bg-[#0F2942] text-white"
                               : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
@@ -1097,7 +1093,6 @@ export function TeacherPortalClient({
                     Form Teacher Of (1st Period Class)
                   </label>
                   <select
-                    disabled={role !== "admin"}
                     value={form.formTeacherClass}
                     onChange={(e) =>
                       setForm((p) => ({
@@ -1105,7 +1100,7 @@ export function TeacherPortalClient({
                         formTeacherClass: e.target.value,
                       }))
                     }
-                    className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-[#0F2942] focus:ring-2 focus:ring-[#0F2942]/15 disabled:bg-slate-100 disabled:text-slate-500"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-[#0F2942] focus:ring-2 focus:ring-[#0F2942]/15"
                   >
                     <option value="None">None (Subject Teacher Only)</option>
                     {CLASS_ORDER.map((cls) => (
@@ -1122,13 +1117,12 @@ export function TeacherPortalClient({
                   </label>
                   <input
                     type="text"
-                    disabled={role !== "admin"}
                     value={form.subjects}
                     onChange={(e) =>
                       setForm((p) => ({ ...p, subjects: e.target.value }))
                     }
                     placeholder="e.g., Mathematics, Physics"
-                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm outline-none focus:border-[#0F2942] focus:ring-2 focus:ring-[#0F2942]/15 disabled:bg-slate-100 disabled:text-slate-500"
+                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm outline-none focus:border-[#0F2942] focus:ring-2 focus:ring-[#0F2942]/15"
                   />
                 </div>
 
