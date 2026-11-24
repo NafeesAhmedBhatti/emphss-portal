@@ -4,7 +4,6 @@ import {
   ArrowUpRight,
   GraduationCap,
   Layers,
-  MapPin,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
@@ -39,11 +38,7 @@ export default function DeveloperPage() {
                   Nafees Ahmed Bhatti
                 </h1>
                 <p className="mt-1 text-sm font-medium text-amber-200 sm:text-base">
-                  Computer Science Teacher (EMPHSS) &amp; AI Engineer
-                </p>
-                <p className="mt-1 flex items-center justify-center gap-1.5 text-xs text-slate-300 sm:justify-start">
-                  <MapPin className="h-3.5 w-3.5 text-amber-400" />
-                  Bawli, Jammu &amp; Kashmir
+                  AI Engineer &amp; Full-Stack Developer • CS Faculty, EMPHSS
                 </p>
 
                 <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5 sm:justify-start">
@@ -74,15 +69,17 @@ export default function DeveloperPage() {
               About the Creator
             </h2>
             <p className="mt-2.5 text-sm leading-relaxed text-slate-600 sm:text-base">
-              I teach{" "}
+              I&apos;m an{" "}
               <strong className="text-[#0F2942]">
-                Computer Science (Class 11 &amp; 12)
+                AI Engineer and Full-Stack Developer
               </strong>{" "}
-              at English Medium Public Higher Secondary School, Bawli and work
-              as an <strong className="text-[#0F2942]">AI Engineer</strong>. I
-              built this digital portal so our students, parents, and teachers
-              can access Digital ID cards, school notices, and academic records
-              easily from any phone.
+              building LLM-powered systems and modern web applications in
+              TypeScript, Next.js, Python, and PostgreSQL—alongside teaching
+              Computer Science at{" "}
+              <strong className="text-[#0F2942]">EMPHSS Bawli</strong>. I
+              designed and engineered this portal end-to-end so students,
+              parents, and staff can manage Digital IDs, notices, and academic
+              records from any device.
             </p>
             <p className="mt-3 text-xs text-slate-500 sm:text-sm">
               Want to see my engineering work, AI projects, and full technical
