@@ -48,7 +48,7 @@ export default function DeveloperPage() {
 
                 <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5 sm:justify-start">
                   <a
-                    href="https://nafees-portfolio-livid.vercel.app/"
+                    href="https://nafeesbhatti.vercel.app/"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2.5 text-xs font-bold text-[#0F2942] shadow-md transition-all hover:bg-amber-400"
@@ -88,7 +88,7 @@ export default function DeveloperPage() {
               Want to see my engineering work, AI projects, and full technical
               background? Visit my{" "}
               <a
-                href="https://nafees-portfolio-livid.vercel.app/"
+                href="https://nafeesbhatti.vercel.app/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-semibold text-[#0F2942] underline decoration-amber-400 underline-offset-4 hover:text-amber-700"
