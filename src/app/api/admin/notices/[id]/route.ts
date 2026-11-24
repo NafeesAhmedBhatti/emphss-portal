@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { privateJson, verifySameOrigin } from "@/lib/http";
@@ -26,6 +27,7 @@ export async function PATCH(
       data,
     });
 
+    revalidatePath("/");
     return privateJson({ notice });
   } catch (error) {
     console.error("Update notice error:", error);
@@ -51,6 +53,7 @@ export async function DELETE(
   try {
     const { id } = await context.params;
     await prisma.notice.delete({ where: { id } });
+    revalidatePath("/");
     return privateJson({ success: true });
   } catch (error) {
     console.error("Delete notice error:", error);

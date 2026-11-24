@@ -11,6 +11,8 @@ import {
   Loader2,
   Lock,
   ShieldCheck,
+  UserCheck,
+  UserPlus,
   Users,
 } from "lucide-react";
 
@@ -21,6 +23,10 @@ export function StaffLoginForm() {
     searchParams.get("tab") === "admin" ? "admin" : "teacher";
 
   const [mode, setMode] = useState<"teacher" | "admin">(initialTab);
+  const [teacherSubMode, setTeacherSubMode] = useState<"pin" | "passcode">(
+    "pin"
+  );
+  const [identifier, setIdentifier] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -33,12 +39,20 @@ export function StaffLoginForm() {
     setLoading(true);
 
     try {
+      const apiMode =
+        mode === "admin"
+          ? "admin"
+          : teacherSubMode === "pin"
+          ? "teacher_pin"
+          : "teacher";
+
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mode,
+          mode: apiMode,
           email: mode === "admin" ? email : undefined,
+          identifier: apiMode === "teacher_pin" ? identifier : undefined,
           password,
         }),
       });
@@ -48,6 +62,10 @@ export function StaffLoginForm() {
         setError(data.error || "Invalid credentials. Please try again.");
         setLoading(false);
         return;
+      }
+
+      if (data.teacherId && typeof window !== "undefined") {
+        window.localStorage.setItem("emphss_active_teacher_id", data.teacherId);
       }
 
       router.push(data.redirectTo);
@@ -120,10 +138,65 @@ export function StaffLoginForm() {
           )}
 
           {mode === "teacher" ? (
-            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs leading-relaxed text-amber-950">
-              Enter the <strong>Staff Access Password</strong> shared by your
-              School Admin to add or update your teacher profile.
-            </div>
+            <>
+              {/* Sub-mode switcher: Returning Teacher PIN vs First-Time Staff Passcode */}
+              <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-slate-200 bg-slate-100/80 p-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTeacherSubMode("pin");
+                    setError("");
+                    setPassword("");
+                  }}
+                  className={`flex items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-bold transition-all ${
+                    teacherSubMode === "pin"
+                      ? "bg-white text-[#0F2942] shadow-xs"
+                      : "text-slate-600 hover:text-[#0F2942]"
+                  }`}
+                >
+                  <UserCheck className="h-3.5 w-3.5 text-emerald-600" />
+                  My PIN Login
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTeacherSubMode("passcode");
+                    setError("");
+                    setPassword("");
+                  }}
+                  className={`flex items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-bold transition-all ${
+                    teacherSubMode === "passcode"
+                      ? "bg-white text-[#0F2942] shadow-xs"
+                      : "text-slate-600 hover:text-[#0F2942]"
+                  }`}
+                >
+                  <UserPlus className="h-3.5 w-3.5 text-amber-600" />
+                  First-Time Setup
+                </button>
+              </div>
+
+              {teacherSubMode === "pin" ? (
+                <div>
+                  <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                    Teacher ID or Mobile Number
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder="e.g., EMPHSS-T01 or 10-digit Mobile"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-[#0F2942] focus:ring-2 focus:ring-[#0F2942]/15"
+                  />
+                </div>
+              ) : (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs leading-relaxed text-amber-950">
+                  First time creating your Teacher ID? Enter the{" "}
+                  <strong>Staff Access Password</strong> shared by the School
+                  Admin to register your profile and set your Personal PIN.
+                </div>
+              )}
+            </>
           ) : (
             <div>
               <label className="mb-1.5 block text-sm font-semibold text-slate-700">
@@ -143,7 +216,11 @@ export function StaffLoginForm() {
           <div>
             <label className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
               <KeyRound className="h-4 w-4 text-slate-400" />
-              {mode === "teacher" ? "Staff Access Password" : "Admin Password"}
+              {mode === "admin"
+                ? "Admin Password"
+                : teacherSubMode === "pin"
+                ? "Personal Teacher PIN"
+                : "Staff Access Password"}
             </label>
             <div className="relative">
               <input
@@ -152,9 +229,11 @@ export function StaffLoginForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder={
-                  mode === "teacher"
-                    ? "Enter staff access password"
-                    : "Enter admin password"
+                  mode === "admin"
+                    ? "Enter admin password"
+                    : teacherSubMode === "pin"
+                    ? "Enter your personal PIN"
+                    : "Enter school staff access password"
                 }
                 className="w-full rounded-xl border border-slate-300 bg-white py-3 pr-11 pl-4 text-sm text-slate-900 outline-none focus:border-[#0F2942] focus:ring-2 focus:ring-[#0F2942]/15"
               />
@@ -186,9 +265,11 @@ export function StaffLoginForm() {
             ) : (
               <>
                 <Lock className="h-4 w-4 text-amber-400" />
-                {mode === "teacher"
-                  ? "Sign In to Teacher Portal"
-                  : "Sign In to Admin Panel"}
+                {mode === "admin"
+                  ? "Sign In to Admin Panel"
+                  : teacherSubMode === "pin"
+                  ? "Sign In with My PIN"
+                  : "Continue to Profile Setup"}
               </>
             )}
           </button>

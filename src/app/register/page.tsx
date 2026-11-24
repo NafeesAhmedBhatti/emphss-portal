@@ -5,7 +5,7 @@ import { StudentRegistrationForm } from "@/components/StudentRegistrationForm";
 import { Lock } from "lucide-react";
 import Link from "next/link";
 
-export const revalidate = 30;
+export const revalidate = 300;
 
 export default async function RegisterPage() {
   const settings = await prisma.schoolSettings.findUnique({

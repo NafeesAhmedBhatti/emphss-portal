@@ -20,25 +20,30 @@ export function Navbar() {
 
   useEffect(() => {
     let mounted = true;
-    fetch("/api/students/me", { cache: "no-store" })
-      .then((res) => res.json())
-      .then((data) => {
-        if (!mounted) return;
-        if (data.student) {
-          setActiveStudent({
-            referenceId: data.student.referenceId,
-            studentName: data.student.studentName,
-            photoData: data.student.photoData,
-          });
-        } else {
-          setActiveStudent(null);
-        }
-      })
-      .catch(() => {});
+    function loadStudentBadge() {
+      fetch("/api/students/me", { cache: "no-store" })
+        .then((res) => res.json())
+        .then((data) => {
+          if (!mounted) return;
+          if (data.student) {
+            setActiveStudent({
+              referenceId: data.student.referenceId,
+              studentName: data.student.studentName,
+              photoData: data.student.photoData,
+            });
+          } else {
+            setActiveStudent(null);
+          }
+        })
+        .catch(() => {});
+    }
+    loadStudentBadge();
+    window.addEventListener("emphss-student-auth", loadStudentBadge);
     return () => {
       mounted = false;
+      window.removeEventListener("emphss-student-auth", loadStudentBadge);
     };
-  }, [pathname]);
+  }, []);
 
   const isActive = (href: string) => pathname === href;
 

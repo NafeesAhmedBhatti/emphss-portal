@@ -1,6 +1,7 @@
+import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth";
+import { getSession, invalidateSessionVersionCache } from "@/lib/auth";
 import { privateJson, verifySameOrigin } from "@/lib/http";
 
 export async function PATCH(request: Request) {
@@ -42,6 +43,10 @@ export async function PATCH(request: Request) {
         registrationOpen: true,
       },
     });
+
+    invalidateSessionVersionCache();
+    revalidatePath("/");
+    revalidatePath("/register");
 
     return privateJson({ settings: updated });
   } catch (error) {

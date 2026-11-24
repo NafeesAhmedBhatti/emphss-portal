@@ -12,10 +12,17 @@ export async function POST(request: Request) {
   try {
     const ip = getClientIp(request);
     const body = await request.json();
-    const mode = body.mode === "admin" ? "admin" : "teacher";
+    const mode =
+      body.mode === "admin"
+        ? "admin"
+        : body.mode === "teacher_pin"
+        ? "teacher_pin"
+        : "teacher";
     const password = typeof body.password === "string" ? body.password : "";
     const email =
       typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const identifier =
+      typeof body.identifier === "string" ? body.identifier.trim() : "";
 
     if (!password) {
       return privateJson(
@@ -55,6 +62,75 @@ export async function POST(request: Request) {
         { error: "School settings are not initialized." },
         { status: 500 }
       );
+    }
+
+    if (mode === "teacher_pin") {
+      if (!identifier) {
+        return privateJson(
+          { error: "Please enter your Teacher ID (e.g. EMPHSS-T01) or Mobile Number." },
+          { status: 400 }
+        );
+      }
+      const upperCode = identifier.toUpperCase();
+      const digits = identifier.replace(/\D/g, "");
+      const teacher = await prisma.teacher.findFirst({
+        where: {
+          isActive: true,
+          OR: [
+            { teacherCode: upperCode },
+            ...(digits.length === 10 ? [{ mobileNumber: digits }] : []),
+          ],
+        },
+        select: {
+          id: true,
+          teacherCode: true,
+          pinHash: true,
+          pinVersion: true,
+        },
+      });
+
+      if (!teacher || !teacher.pinHash) {
+        return privateJson(
+          {
+            error:
+              "Invalid Teacher ID / Mobile Number or PIN. New teachers should use 'First-Time Setup (Staff Passcode)'.",
+          },
+          { status: 401 }
+        );
+      }
+
+      const validPin = await bcrypt.compare(password, teacher.pinHash);
+      if (!validPin) {
+        return privateJson(
+          { error: "Invalid Teacher ID / Mobile Number or Personal PIN." },
+          { status: 401 }
+        );
+      }
+
+      await Promise.all([resetRateLimit(ipKey), resetRateLimit(modeKey)]);
+
+      const token = await signSessionToken({
+        role: "teacher",
+        v: settings.sessionVersion,
+        teacherId: teacher.id,
+        tv: teacher.pinVersion,
+      });
+      const response = privateJson({
+        success: true,
+        role: "teacher",
+        teacherId: teacher.id,
+        redirectTo: "/teacher/dashboard",
+      });
+
+      response.cookies.set(SESSION_COOKIE_NAME, token, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 30,
+      });
+
+      return response;
     }
 
     if (mode === "teacher") {

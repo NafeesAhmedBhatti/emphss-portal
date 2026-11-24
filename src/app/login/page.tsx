@@ -1,6 +1,7 @@
 import { Suspense } from "react";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { StaffLoginForm } from "@/components/StaffLoginForm";
@@ -8,7 +9,9 @@ import { StaffLoginForm } from "@/components/StaffLoginForm";
 export const dynamic = "force-dynamic";
 
 export default async function LoginPage() {
-  const session = await getSession();
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const session = token ? await verifySessionToken(token) : null;
   if (session?.role === "admin") {
     redirect("/admin");
   }

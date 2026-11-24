@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { NOTICE_CATEGORIES } from "@/lib/constants";
@@ -61,6 +62,7 @@ export async function POST(request: Request) {
       },
     });
 
+    revalidatePath("/");
     return privateJson({ notice }, { status: 201 });
   } catch (error) {
     console.error("Create notice error:", error);

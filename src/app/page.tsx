@@ -19,7 +19,7 @@ import {
   getUpcomingAutoHolidays,
 } from "@/lib/holidays";
 
-export const revalidate = 60;
+export const revalidate = 300;
 
 const CATEGORY_STYLES: Record<string, string> = {
   Admission: "bg-emerald-50 text-emerald-700 border-emerald-200",

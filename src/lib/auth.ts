@@ -60,6 +60,29 @@ export async function verifySessionToken(
   }
 }
 
+let cachedSessionVersion: { value: number; expiresAt: number } | null = null;
+
+export function invalidateSessionVersionCache(): void {
+  cachedSessionVersion = null;
+}
+
+async function getCurrentSessionVersion(): Promise<number | null> {
+  const now = Date.now();
+  if (cachedSessionVersion && cachedSessionVersion.expiresAt > now) {
+    return cachedSessionVersion.value;
+  }
+  const settings = await prisma.schoolSettings.findUnique({
+    where: { id: "main" },
+    select: { sessionVersion: true },
+  });
+  if (!settings) return null;
+  cachedSessionVersion = {
+    value: settings.sessionVersion,
+    expiresAt: now + 30_000,
+  };
+  return settings.sessionVersion;
+}
+
 export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
@@ -67,11 +90,8 @@ export async function getSession(): Promise<SessionPayload | null> {
   const session = await verifySessionToken(token);
   if (!session) return null;
 
-  const settings = await prisma.schoolSettings.findUnique({
-    where: { id: "main" },
-    select: { sessionVersion: true },
-  });
-  if (settings && session.v !== settings.sessionVersion) {
+  const currentVersion = await getCurrentSessionVersion();
+  if (currentVersion !== null && session.v !== currentVersion) {
     return null;
   }
 
