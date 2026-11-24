@@ -2,16 +2,11 @@ import Link from "next/link";
 import {
   ArrowLeft,
   ArrowUpRight,
-  Award,
-  Briefcase,
-  Code2,
-  Cpu,
   GraduationCap,
   Layers,
   MapPin,
   ShieldCheck,
   Sparkles,
-  Users,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
@@ -38,17 +33,17 @@ export default function DeveloperPage() {
               <div className="flex-1">
                 <div className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-amber-300">
                   <Sparkles className="h-3.5 w-3.5" />
-                  Portal Architect &amp; Creator
+                  Portal Architect &amp; CS Faculty
                 </div>
                 <h1 className="font-heading mt-2.5 text-2xl font-bold sm:text-3xl">
                   Nafees Ahmed Bhatti
                 </h1>
                 <p className="mt-1 text-sm font-medium text-amber-200 sm:text-base">
-                  AI Engineer &amp; Full-Stack Developer
+                  Computer Science Teacher (EMPHSS) &amp; AI Engineer
                 </p>
                 <p className="mt-1 flex items-center justify-center gap-1.5 text-xs text-slate-300 sm:justify-start">
                   <MapPin className="h-3.5 w-3.5 text-amber-400" />
-                  Jammu &amp; Kashmir, India
+                  Bawli, Jammu &amp; Kashmir
                 </p>
 
                 <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5 sm:justify-start">
@@ -71,134 +66,37 @@ export default function DeveloperPage() {
                 </div>
               </div>
             </div>
-
-            {/* Impact Stats Strip */}
-            <div className="mt-7 grid grid-cols-2 gap-3 border-t border-white/15 pt-6 sm:grid-cols-4">
-              {[
-                { label: "Students Trained", value: "500+" },
-                { label: "Experience", value: "2+ Years" },
-                { label: "Technologies", value: "20+" },
-                { label: "Current Role", value: "AI Engineer" },
-              ].map((stat) => (
-                <div
-                  key={stat.label}
-                  className="rounded-2xl border border-white/10 bg-white/5 px-3.5 py-3 text-center"
-                >
-                  <p className="font-heading text-lg font-bold text-amber-300 sm:text-xl">
-                    {stat.value}
-                  </p>
-                  <p className="mt-0.5 text-[11px] font-medium text-slate-300">
-                    {stat.label}
-                  </p>
-                </div>
-              ))}
-            </div>
           </div>
 
-          {/* About & Technical Intro */}
+          {/* Concise School-Focused Introduction */}
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs sm:p-8">
             <h2 className="font-heading text-lg font-bold text-[#0F2942]">
-              About Nafees Ahmed Bhatti
+              About the Creator
             </h2>
             <p className="mt-2.5 text-sm leading-relaxed text-slate-600 sm:text-base">
-              I&apos;m an{" "}
+              I teach{" "}
               <strong className="text-[#0F2942]">
-                AI Engineer at Drytis
+                Computer Science (Class 11 &amp; 12)
               </strong>{" "}
-              and{" "}
-              <strong className="text-[#0F2942]">
-                Computer Science Teacher at EMPHSS Bawli
-              </strong>
-              , focused on building production LLM workflows and full-stack web
-              applications in TypeScript, Next.js, Python, and PostgreSQL—alongside
-              mentoring 500+ students in practical software development.
+              at English Medium Public Higher Secondary School, Bawli and work
+              as an <strong className="text-[#0F2942]">AI Engineer</strong>. I
+              built this digital portal so our students, parents, and teachers
+              can access Digital ID cards, school notices, and academic records
+              easily from any phone.
             </p>
-            <p className="mt-3 text-sm leading-relaxed text-slate-600 sm:text-base">
-              I designed and engineered this{" "}
-              <strong className="text-[#0F2942]">
-                EMPHSS Digital School Portal
-              </strong>{" "}
-              end-to-end with role-based authentication, instant Digital ID
-              cards, and a Digital Award Roll for students, teachers, and
-              administration.
+            <p className="mt-3 text-xs text-slate-500 sm:text-sm">
+              Want to see my engineering work, AI projects, and full technical
+              background? Visit my{" "}
+              <a
+                href="https://nafees-portfolio-livid.vercel.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-[#0F2942] underline decoration-amber-400 underline-offset-4 hover:text-amber-700"
+              >
+                Personal Portfolio
+              </a>
+              .
             </p>
-          </div>
-
-          {/* Experience Cards */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs">
-              <div className="flex items-center justify-between">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0F2942] text-amber-400">
-                  <Cpu className="h-5 w-5" />
-                </div>
-                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
-                  Current Role
-                </span>
-              </div>
-              <h3 className="font-heading mt-4 text-base font-bold text-[#0F2942]">
-                AI Engineer — DryTIS
-              </h3>
-              <p className="mt-1.5 text-xs leading-relaxed text-slate-600 sm:text-sm">
-                Building practical Generative AI applications, LLM workflows,
-                RAG pipelines, and production machine learning models with
-                Python and modern full-stack architectures.
-              </p>
-            </div>
-
-            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs">
-              <div className="flex items-center justify-between">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
-                  <Users className="h-5 w-5" />
-                </div>
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">
-                  1 Year • Teaching
-                </span>
-              </div>
-              <h3 className="font-heading mt-4 text-base font-bold text-[#0F2942]">
-                Technical Trainer — Desire Infotech
-              </h3>
-              <p className="mt-1.5 text-xs leading-relaxed text-slate-600 sm:text-sm">
-                Served for 1 year as a dedicated Trainer in the teaching field,
-                mentoring students in web development, programming logic, and
-                real-world software projects.
-              </p>
-            </div>
-          </div>
-
-          {/* Technical Toolkit */}
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs sm:p-8">
-            <h2 className="font-heading flex items-center gap-2 text-lg font-bold text-[#0F2942]">
-              <Code2 className="h-5 w-5 text-amber-600" />
-              Technical Expertise
-            </h2>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {[
-                "Next.js",
-                "React.js",
-                "TypeScript",
-                "Python",
-                "Node.js",
-                "Express.js",
-                "Django",
-                "Laravel",
-                "PostgreSQL",
-                "Prisma ORM",
-                "MongoDB",
-                "Tailwind CSS",
-                "Generative AI",
-                "LLMs & RAG",
-                "TensorFlow",
-                "Scikit-Learn",
-                "OpenCV",
-              ].map((skill) => (
-                <span
-                  key={skill}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-[#0F2942]"
-                >
-                  {skill}
-                </span>
-              ))}
-            </div>
           </div>
 
           {/* What Was Built for EMPHSS */}
@@ -207,17 +105,17 @@ export default function DeveloperPage() {
               {
                 icon: GraduationCap,
                 title: "Student ID & Profiles",
-                desc: "Mobile photo upload, Form Teacher approval queue, and instant PNG/PDF ID cards.",
+                desc: "Mobile photo upload, Form Teacher verification, and instant Digital ID cards.",
               },
               {
                 icon: Layers,
-                title: "Award Roll Engine",
-                desc: "Class-wise examination Award Rolls with draft saving and automatic pass analytics.",
+                title: "Teacher & Award Roll",
+                desc: "Class-wise examination Award Rolls with draft saving and student lookup.",
               },
               {
                 icon: ShieldCheck,
-                title: "Tight Role Security",
-                desc: "4-Factor student verification, 90-day staff sessions, and annual class promotion.",
+                title: "Privacy & Role Security",
+                desc: "4-Factor student verification, encrypted staff sessions, and annual class promotion.",
               },
             ].map((item) => {
               const Icon = item.icon;
